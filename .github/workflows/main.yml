@@ -1,0 +1,118 @@
+#
+# Copyright (c) 2021-present, Trail of Bits, Inc.
+# All rights reserved.
+#
+# This source code is licensed in accordance with the terms specified in
+# the LICENSE file found in the root directory of this source tree.
+#
+
+name: Linux
+
+on:
+  push:
+    branches:
+      - '*'
+
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-20.04]
+        compiler: [clang, gcc]
+        build_type: [RelWithDebInfo, Debug]
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - name: Select the CMake version
+      id: cmake_version
+      run: echo ::set-output name=VALUE::3.16.4
+
+    - name: Generate cache key
+      id: cache_key
+      run: echo ::set-output name=VALUE::build_${{ matrix.os }}_type-${{ matrix.build_type }}_cmake-${{ steps.cmake_version.outputs.VALUE }}
+
+    - name: Update the cache (ccache)
+      uses: actions/cache@v1.0.3
+      with:
+        path: ccache
+        key: ${{ steps.cache_key.outputs.VALUE }}_ccache
+
+    - name: Update the cache (Downloads)
+      uses: actions/cache@v1.0.3
+      with:
+        path: downloads
+        key: ${{ steps.cache_key.outputs.VALUE }}_downloads
+
+    - name: Update the cache (git submodules)
+      uses: actions/cache@v1.0.3
+      with:
+        path: .git/modules
+        key: ${{ steps.cache_key.outputs.VALUE }}_gitsubmodules
+
+    - name: Create the build folders
+      run: mkdir -p ccache build downloads
+
+    - name: Synchronize the submodules
+      run: git submodule sync --recursive
+
+    - name: Update the submodules
+      run: git submodule update --init --recursive
+
+    - name: Install system dependencies
+      run: sudo apt-get install ccache ninja-build -y
+
+    - name: Install CMake
+      id: cmake_installer
+      run: |
+        if [ ! -f downloads/cmake.tar.gz ] ; then
+          curl \
+            -L "https://github.com/Kitware/CMake/releases/download/v${{ steps.cmake_version.outputs.VALUE }}/cmake-${{ steps.cmake_version.outputs.VALUE }}-Linux-x86_64.tar.gz" \
+            -o downloads/cmake.tar.gz
+        fi
+
+        tar xzf downloads/cmake.tar.gz
+        echo ::set-output name=CMAKE_BINARY::$(realpath $(find cmake* -type d -name bin)/cmake)
+
+    - name: Configure the project
+      run: |
+        export CCACHE_DIR="$(realpath ccache)"
+
+        if [[ "${{ matrix.compiler }}" == "clang" ]] ; then
+          c_compiler="${{ matrix.compiler }}"
+          cxx_compiler="${{ matrix.compiler }}++"
+
+        elif [[ "${{ matrix.compiler }}" == "gcc" ]] ; then
+          c_compiler="gcc"
+          cxx_compiler="g++"
+
+        else
+          echo "Invalid compiler specified: ${{ matrix.compiler }}"
+          exit 1
+        fi
+
+        ${{ steps.cmake_installer.outputs.CMAKE_BINARY }} \
+          -S . \
+          -B build \
+          -G Ninja \
+          -DCMAKE_C_COMPILER="${c_compiler}" \
+          -DCMAKE_CXX_COMPILER="${cxx_compiler}" \
+          -DCMAKE_BUILD_TYPE:STRING=${{ matrix.build_type }} \
+          -DBTFPARSE_ENABLE_TOOLS=true \
+          -DBTFPARSE_ENABLE_TESTS=true
+
+    - name: Build the project
+      run: |
+        export CCACHE_DIR="$(realpath ccache)"
+        cmake --build build -j
+
+    - name: Run the tests
+      run: |
+        cmake --build build --target test
+
