@@ -22,6 +22,7 @@ const std::unordered_map<std::uint8_t, BTFTypeParser> kBTFParserMap{
     {BTFKind_Typedef, BTF::parseTypedefData},
     {BTFKind_Enum, BTF::parseEnumData},
     {BTFKind_FuncProto, BTF::parseFuncProtoData},
+    {BTFKind_Volatile, BTF::parseVolatileData},
 };
 
 }
@@ -358,15 +359,10 @@ BTF::parsePtrData(const BTFHeader &btf_header,
     };
   }
 
-  try {
-    PtrBTFType output;
-    output.type = btf_type_header.size_or_type;
+  PtrBTFType output;
+  output.type = btf_type_header.size_or_type;
 
-    return BTFType{output};
-
-  } catch (const FileReaderError &error) {
-    return convertFileReaderError(error);
-  }
+  return BTFType{output};
 }
 
 Result<BTFType, BTFError>
@@ -389,15 +385,10 @@ BTF::parseConstData(const BTFHeader &btf_header,
     };
   }
 
-  try {
-    ConstBTFType output;
-    output.type = btf_type_header.size_or_type;
+  ConstBTFType output;
+  output.type = btf_type_header.size_or_type;
 
-    return BTFType{output};
-
-  } catch (const FileReaderError &error) {
-    return convertFileReaderError(error);
-  }
+  return BTFType{output};
 }
 
 Result<BTFType, BTFError>
@@ -453,23 +444,18 @@ BTF::parseTypedefData(const BTFHeader &btf_header,
     };
   }
 
-  try {
-    auto name_offset =
-        btf_header.hdr_len + btf_header.str_off + btf_type_header.name_off;
+  auto name_offset =
+      btf_header.hdr_len + btf_header.str_off + btf_type_header.name_off;
 
-    auto name_res = parseString(file_reader, name_offset);
-    if (name_res.failed()) {
-      return name_res.takeError();
-    }
-
-    TypedefBTFType output;
-    output.name = name_res.takeValue();
-
-    return BTFType{output};
-
-  } catch (const FileReaderError &error) {
-    return convertFileReaderError(error);
+  auto name_res = parseString(file_reader, name_offset);
+  if (name_res.failed()) {
+    return name_res.takeError();
   }
+
+  TypedefBTFType output;
+  output.name = name_res.takeValue();
+
+  return BTFType{output};
 }
 
 Result<BTFType, BTFError>
@@ -594,6 +580,32 @@ BTF::parseFuncProtoData(const BTFHeader &btf_header,
   } catch (const FileReaderError &error) {
     return convertFileReaderError(error);
   }
+}
+
+Result<BTFType, BTFError>
+BTF::parseVolatileData(const BTFHeader &btf_header,
+                       const BTFTypeHeader &btf_type_header,
+                       IFileReader &file_reader) noexcept {
+
+  BTFErrorInformation::FileRange file_range{
+      file_reader.offset() - kBTFTypeHeaderSize,
+      kBTFTypeHeaderSize + kIntBTFTypeSize};
+
+  if (btf_type_header.name_off != 0 || btf_type_header.kind_flag ||
+      btf_type_header.vlen != 0) {
+
+    return BTFError{
+        BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidVolatileBTFTypeEncoding,
+            file_range,
+        },
+    };
+  }
+
+  VolatileBTFType output;
+  output.type = btf_type_header.size_or_type;
+
+  return BTFType{output};
 }
 
 Result<std::string, BTFError> BTF::parseString(IFileReader &file_reader,
