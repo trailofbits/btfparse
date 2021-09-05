@@ -34,46 +34,53 @@ private:
 public:
   using BTFTypeList = std::vector<BTFType>;
 
-  static BTFError convertFileReaderError(const FileReaderError &error);
+  static BTFError convertFileReaderError(const FileReaderError &error) noexcept;
 
-  static std::optional<BTFError> detectEndianness(bool &little_endian,
-                                                  IFileReader &file_reader);
+  static std::optional<BTFError>
+  detectEndianness(bool &little_endian, IFileReader &file_reader) noexcept;
 
-  static Result<BTFHeader, BTFError> readBTFHeader(IFileReader &file_reader);
+  static Result<BTFHeader, BTFError>
+  readBTFHeader(IFileReader &file_reader) noexcept;
 
   static Result<BTFTypeList, BTFError>
-  parseTypeSection(const BTFHeader &btf_header, IFileReader &file_reader);
+  parseTypeSection(const BTFHeader &btf_header,
+                   IFileReader &file_reader) noexcept;
 
   static Result<BTFTypeHeader, BTFError>
-  parseBTFTypeHeader(IFileReader &file_reader);
+  parseTypeHeader(IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseBTFTypeIntData(const BTFHeader &btf_header,
-                      const BTFTypeHeader &btf_type_header,
-                      IFileReader &file_reader);
+  parseIntData(const BTFHeader &btf_header,
+               const BTFTypeHeader &btf_type_header,
+               IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseBTFTypePtrData(const BTFHeader &btf_header,
-                      const BTFTypeHeader &btf_type_header,
-                      IFileReader &file_reader);
+  parsePtrData(const BTFHeader &btf_header,
+               const BTFTypeHeader &btf_type_header,
+               IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseBTFTypeConstData(const BTFHeader &btf_header,
-                        const BTFTypeHeader &btf_type_header,
-                        IFileReader &file_reader);
+  parseConstData(const BTFHeader &btf_header,
+                 const BTFTypeHeader &btf_type_header,
+                 IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseBTFTypeArrayData(const BTFHeader &btf_header,
-                        const BTFTypeHeader &btf_type_header,
-                        IFileReader &file_reader);
+  parseArrayData(const BTFHeader &btf_header,
+                 const BTFTypeHeader &btf_type_header,
+                 IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseBTFTypeTypedefData(const BTFHeader &btf_header,
-                          const BTFTypeHeader &btf_type_header,
-                          IFileReader &file_reader);
+  parseTypedefData(const BTFHeader &btf_header,
+                   const BTFTypeHeader &btf_type_header,
+                   IFileReader &file_reader) noexcept;
 
-  static Result<std::string, BTFError> parseString(IFileReader &file_reader,
-                                                   std::uint64_t offset);
+  static Result<BTFType, BTFError>
+  parseEnumData(const BTFHeader &btf_header,
+                const BTFTypeHeader &btf_type_header,
+                IFileReader &file_reader) noexcept;
+
+  static Result<std::string, BTFError>
+  parseString(IFileReader &file_reader, std::uint64_t offset) noexcept;
 
   friend class IBTF;
 };

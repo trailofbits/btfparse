@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <vector>
 
 namespace btfparse {
 
@@ -30,6 +31,7 @@ struct BTFErrorInformation final {
     InvalidPtrBTFTypeEncoding,
     InvalidArrayBTFTypeEncoding,
     InvalidTypedefBTFTypeEncoding,
+    InvalidEnumBTFTypeEncoding,
   };
 
   struct FileRange final {
@@ -88,6 +90,10 @@ struct BTFErrorInformationPrinter final {
     case BTFErrorInformation::Code::InvalidTypedefBTFTypeEncoding:
       buffer << "Invalid encoding of `Typedef` BTFType";
       break;
+
+    case BTFErrorInformation::Code::InvalidEnumBTFTypeEncoding:
+      buffer << "Invalid encoding of `Enum` BTFType";
+      break;
     }
 
     buffer << "'";
@@ -134,8 +140,21 @@ struct TypedefBTFType final {
   std::uint32_t type{};
 };
 
-using BTFType = std::variant<std::monostate, IntBTFType, PtrBTFType,
-                             ConstBTFType, ArrayBTFType, TypedefBTFType>;
+struct EnumBTFType final {
+  struct Value final {
+    std::string name;
+    std::int32_t val{};
+  };
+
+  using ValueList = std::vector<Value>;
+
+  std::optional<std::string> opt_name;
+  ValueList value_list;
+};
+
+using BTFType =
+    std::variant<std::monostate, IntBTFType, PtrBTFType, ConstBTFType,
+                 ArrayBTFType, TypedefBTFType, EnumBTFType>;
 
 class IBTF {
 public:
