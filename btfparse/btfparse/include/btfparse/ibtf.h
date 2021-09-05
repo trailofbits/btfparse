@@ -27,6 +27,9 @@ struct BTFErrorInformation final {
     InvalidMagicValue,
     InvalidBTFKind,
     InvalidIntBTFTypeEncoding,
+    InvalidPtrBTFTypeEncoding,
+    InvalidArrayBTFTypeEncoding,
+    InvalidTypedefBTFTypeEncoding,
   };
 
   struct FileRange final {
@@ -71,7 +74,19 @@ struct BTFErrorInformationPrinter final {
       break;
 
     case BTFErrorInformation::Code::InvalidIntBTFTypeEncoding:
-      buffer << "Invalid `encoding` field in integer BTFType data";
+      buffer << "Invalid encoding of `Int` BTFType";
+      break;
+
+    case BTFErrorInformation::Code::InvalidPtrBTFTypeEncoding:
+      buffer << "Invalid encoding of `Ptr` BTFType";
+      break;
+
+    case BTFErrorInformation::Code::InvalidArrayBTFTypeEncoding:
+      buffer << "Invalid encoding of `Array` BTFType";
+      break;
+
+    case BTFErrorInformation::Code::InvalidTypedefBTFTypeEncoding:
+      buffer << "Invalid encoding of `Typedef` BTFType";
       break;
     }
 
@@ -89,7 +104,7 @@ struct BTFErrorInformationPrinter final {
 
 using BTFError = Error<BTFErrorInformation, BTFErrorInformationPrinter>;
 
-struct BTFTypeIntData final {
+struct IntBTFType final {
   std::string name;
 
   bool is_signed{false};
@@ -100,7 +115,27 @@ struct BTFTypeIntData final {
   std::uint8_t bits{};
 };
 
-using BTFType = std::variant<std::monostate, BTFTypeIntData>;
+struct PtrBTFType final {
+  std::uint32_t type{};
+};
+
+struct ConstBTFType final {
+  std::uint32_t type{};
+};
+
+struct ArrayBTFType final {
+  std::uint32_t type{};
+  std::uint32_t index_type{};
+  std::uint32_t nelems{};
+};
+
+struct TypedefBTFType final {
+  std::string name;
+  std::uint32_t type{};
+};
+
+using BTFType = std::variant<std::monostate, IntBTFType, PtrBTFType,
+                             ConstBTFType, ArrayBTFType, TypedefBTFType>;
 
 class IBTF {
 public:

@@ -17,6 +17,10 @@
 
 namespace btfparse {
 
+using BTFTypeParser = Result<BTFType, BTFError> (*)(const BTFHeader &,
+                                                    const BTFTypeHeader &,
+                                                    IFileReader &);
+
 class BTF final : public IBTF {
 public:
   virtual ~BTF() override;
@@ -43,10 +47,30 @@ public:
   static Result<BTFTypeHeader, BTFError>
   parseBTFTypeHeader(IFileReader &file_reader);
 
-  static Result<BTFTypeIntData, BTFError>
+  static Result<BTFType, BTFError>
   parseBTFTypeIntData(const BTFHeader &btf_header,
                       const BTFTypeHeader &btf_type_header,
                       IFileReader &file_reader);
+
+  static Result<BTFType, BTFError>
+  parseBTFTypePtrData(const BTFHeader &btf_header,
+                      const BTFTypeHeader &btf_type_header,
+                      IFileReader &file_reader);
+
+  static Result<BTFType, BTFError>
+  parseBTFTypeConstData(const BTFHeader &btf_header,
+                        const BTFTypeHeader &btf_type_header,
+                        IFileReader &file_reader);
+
+  static Result<BTFType, BTFError>
+  parseBTFTypeArrayData(const BTFHeader &btf_header,
+                        const BTFTypeHeader &btf_type_header,
+                        IFileReader &file_reader);
+
+  static Result<BTFType, BTFError>
+  parseBTFTypeTypedefData(const BTFHeader &btf_header,
+                          const BTFTypeHeader &btf_type_header,
+                          IFileReader &file_reader);
 
   static Result<std::string, BTFError> parseString(IFileReader &file_reader,
                                                    std::uint64_t offset);

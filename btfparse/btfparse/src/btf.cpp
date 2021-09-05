@@ -12,6 +12,18 @@
 
 namespace btfparse {
 
+namespace {
+
+const std::unordered_map<std::uint8_t, BTFTypeParser> kBTFParserMap{
+    {BTFKind_Int, BTF::parseBTFTypeIntData},
+    {BTFKind_Ptr, BTF::parseBTFTypePtrData},
+    {BTFKind_Const, BTF::parseBTFTypeConstData},
+    {BTFKind_Array, BTF::parseBTFTypeArrayData},
+    {BTFKind_Typedef, BTF::parseBTFTypeTypedefData},
+};
+
+}
+
 struct BTF::PrivateData final {
   BTFTypeList btf_type_list;
 };
@@ -164,18 +176,11 @@ BTF::parseTypeSection(const BTFHeader &btf_header, IFileReader &file_reader) {
 
       auto btf_type_header = btf_type_header_res.takeValue();
 
-      BTFType btf_type{};
-      if (btf_type_header.kind == BTFKind_Int) {
-        auto btf_type_int_res =
-            parseBTFTypeIntData(btf_header, btf_type_header, file_reader);
+      auto parser_it = kBTFParserMap.find(btf_type_header.kind);
+      if (parser_it == kBTFParserMap.end()) {
+        std::cout << "Unsupported entry of kind "
+                  << static_cast<int>(btf_type_header.kind) << std::endl;
 
-        if (btf_type_int_res.failed()) {
-          return btf_type_int_res.takeError();
-        }
-
-        btf_type = btf_type_int_res.takeValue();
-
-      } else {
         BTFErrorInformation::FileRange file_range{current_offset,
                                                   kBTFTypeHeaderSize};
 
@@ -185,7 +190,14 @@ BTF::parseTypeSection(const BTFHeader &btf_header, IFileReader &file_reader) {
         };
       }
 
-      btf_type_list.push_back(std::move(btf_type));
+      const auto &parser = parser_it->second;
+
+      auto btf_type_res = parser(btf_header, btf_type_header, file_reader);
+      if (btf_type_res.failed()) {
+        return btf_type_res.takeError();
+      }
+
+      btf_type_list.push_back(btf_type_res.takeValue());
     }
 
     return btf_type_list;
@@ -216,7 +228,7 @@ BTF::parseBTFTypeHeader(IFileReader &file_reader) {
   }
 }
 
-Result<BTFTypeIntData, BTFError>
+Result<BTFType, BTFError>
 BTF::parseBTFTypeIntData(const BTFHeader &btf_header,
                          const BTFTypeHeader &btf_type_header,
                          IFileReader &file_reader) {
@@ -253,33 +265,34 @@ BTF::parseBTFTypeIntData(const BTFHeader &btf_header,
   }
 
   try {
-    auto name_offset = btf_header.str_off + btf_type_header.name_off;
+    auto name_offset =
+        btf_header.hdr_len + btf_header.str_off + btf_type_header.name_off;
 
     auto name_res = parseString(file_reader, name_offset);
     if (name_res.failed()) {
       return name_res.takeError();
     }
 
-    BTFTypeIntData btf_type_data;
-    btf_type_data.name = name_res.takeValue();
+    IntBTFType output;
+    output.name = name_res.takeValue();
 
     auto integer_info = file_reader.u32();
 
     auto encoding = (integer_info & 0x0F000000UL) >> 24;
-    btf_type_data.is_signed = (encoding & 1) != 0;
-    btf_type_data.is_char = (encoding & 2) != 0;
-    btf_type_data.is_bool = (encoding & 4) != 0;
+    output.is_signed = (encoding & 1) != 0;
+    output.is_char = (encoding & 2) != 0;
+    output.is_bool = (encoding & 4) != 0;
 
     std::size_t encoding_flag_count{0U};
-    if (btf_type_data.is_signed) {
+    if (output.is_signed) {
       ++encoding_flag_count;
     }
 
-    if (btf_type_data.is_char) {
+    if (output.is_char) {
       ++encoding_flag_count;
     }
 
-    if (btf_type_data.is_bool) {
+    if (output.is_bool) {
       ++encoding_flag_count;
     }
 
@@ -292,9 +305,9 @@ BTF::parseBTFTypeIntData(const BTFHeader &btf_header,
       };
     }
 
-    btf_type_data.bits = integer_info & 0x000000ff;
-    if (btf_type_data.bits > 128 ||
-        btf_type_data.bits > btf_type_header.size_or_type * 8) {
+    output.bits = integer_info & 0x000000ff;
+    if (output.bits > 128 || output.bits > btf_type_header.size_or_type * 8) {
+
       return BTFError{
           BTFErrorInformation{
               BTFErrorInformation::Code::InvalidIntBTFTypeEncoding,
@@ -303,9 +316,9 @@ BTF::parseBTFTypeIntData(const BTFHeader &btf_header,
       };
     }
 
-    btf_type_data.offset = (integer_info & 0x00ff0000) >> 16;
-    if (btf_type_data.offset + btf_type_data.bits >
-        btf_type_header.size_or_type * 8) {
+    output.offset = (integer_info & 0x00ff0000) >> 16;
+    if (output.offset + output.bits > btf_type_header.size_or_type * 8) {
+
       return BTFError{
           BTFErrorInformation{
               BTFErrorInformation::Code::InvalidIntBTFTypeEncoding,
@@ -314,7 +327,141 @@ BTF::parseBTFTypeIntData(const BTFHeader &btf_header,
       };
     }
 
-    return btf_type_data;
+    return BTFType{output};
+
+  } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
+}
+
+Result<BTFType, BTFError>
+BTF::parseBTFTypePtrData(const BTFHeader &btf_header,
+                         const BTFTypeHeader &btf_type_header,
+                         IFileReader &file_reader) {
+
+  BTFErrorInformation::FileRange file_range{
+      file_reader.offset() - kBTFTypeHeaderSize,
+      kBTFTypeHeaderSize + kIntBTFTypeSize};
+
+  if (btf_type_header.name_off != 0 || btf_type_header.kind_flag ||
+      btf_type_header.vlen != 0) {
+
+    return BTFError{
+        BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidPtrBTFTypeEncoding,
+            file_range,
+        },
+    };
+  }
+
+  try {
+    PtrBTFType output;
+    output.type = btf_type_header.size_or_type;
+
+    return BTFType{output};
+
+  } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
+}
+
+Result<BTFType, BTFError>
+BTF::parseBTFTypeConstData(const BTFHeader &btf_header,
+                           const BTFTypeHeader &btf_type_header,
+                           IFileReader &file_reader) {
+
+  BTFErrorInformation::FileRange file_range{
+      file_reader.offset() - kBTFTypeHeaderSize,
+      kBTFTypeHeaderSize + kIntBTFTypeSize};
+
+  if (btf_type_header.name_off != 0 || btf_type_header.kind_flag ||
+      btf_type_header.vlen != 0) {
+
+    return BTFError{
+        BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidPtrBTFTypeEncoding,
+            file_range,
+        },
+    };
+  }
+
+  try {
+    ConstBTFType output;
+    output.type = btf_type_header.size_or_type;
+
+    return BTFType{output};
+
+  } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
+}
+
+Result<BTFType, BTFError>
+BTF::parseBTFTypeArrayData(const BTFHeader &btf_header,
+                           const BTFTypeHeader &btf_type_header,
+                           IFileReader &file_reader) {
+
+  BTFErrorInformation::FileRange file_range{
+      file_reader.offset() - kBTFTypeHeaderSize,
+      kBTFTypeHeaderSize + kIntBTFTypeSize};
+
+  if (btf_type_header.name_off != 0 || btf_type_header.kind_flag ||
+      btf_type_header.vlen != 0 || btf_type_header.size_or_type != 0) {
+
+    return BTFError{
+        BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidArrayBTFTypeEncoding,
+            file_range,
+        },
+    };
+  }
+
+  try {
+    ArrayBTFType output;
+    output.type = file_reader.u32();
+    output.index_type = file_reader.u32();
+    output.nelems = file_reader.u32();
+
+    return BTFType{output};
+
+  } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
+}
+
+Result<BTFType, BTFError>
+BTF::parseBTFTypeTypedefData(const BTFHeader &btf_header,
+                             const BTFTypeHeader &btf_type_header,
+                             IFileReader &file_reader) {
+
+  BTFErrorInformation::FileRange file_range{
+      file_reader.offset() - kBTFTypeHeaderSize,
+      kBTFTypeHeaderSize + kIntBTFTypeSize};
+
+  if (btf_type_header.name_off == 0 || btf_type_header.kind_flag ||
+      btf_type_header.vlen != 0) {
+
+    return BTFError{
+        BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidPtrBTFTypeEncoding,
+            file_range,
+        },
+    };
+  }
+
+  try {
+    auto name_offset =
+        btf_header.hdr_len + btf_header.str_off + btf_type_header.name_off;
+
+    auto name_res = parseString(file_reader, name_offset);
+    if (name_res.failed()) {
+      return name_res.takeError();
+    }
+
+    TypedefBTFType output;
+    output.name = name_res.takeValue();
+
+    return BTFType{output};
 
   } catch (const FileReaderError &error) {
     return convertFileReaderError(error);
@@ -325,7 +472,8 @@ Result<std::string, BTFError> BTF::parseString(IFileReader &file_reader,
                                                std::uint64_t offset) {
 
   Result<std::string, BTFError> output;
-  auto original_offset = file_reader.offset();
+
+  auto original_offset{file_reader.offset()};
 
   try {
     file_reader.seek(offset);
