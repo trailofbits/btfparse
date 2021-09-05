@@ -21,6 +21,7 @@ const std::unordered_map<std::uint8_t, BTFTypeParser> kBTFParserMap{
     {BTFKind_Array, BTF::parseArrayData},
     {BTFKind_Typedef, BTF::parseTypedefData},
     {BTFKind_Enum, BTF::parseEnumData},
+    {BTFKind_FuncProto, BTF::parseFuncProtoData},
 };
 
 }
@@ -530,6 +531,62 @@ BTF::parseEnumData(const BTFHeader &btf_header,
       enum_value.val = static_cast<std::int32_t>(file_reader.u32());
 
       output.value_list.push_back(std::move(enum_value));
+    }
+
+    return BTFType{output};
+
+  } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
+}
+
+// TODO: Check the documentation for `BTF_KIND_FUNC_PROTO` for the necessary
+// post-parsing validation steps
+Result<BTFType, BTFError>
+BTF::parseFuncProtoData(const BTFHeader &btf_header,
+                        const BTFTypeHeader &btf_type_header,
+                        IFileReader &file_reader) noexcept {
+
+  BTFErrorInformation::FileRange file_range{
+      file_reader.offset() - kBTFTypeHeaderSize,
+      kBTFTypeHeaderSize + kIntBTFTypeSize};
+
+  if (btf_type_header.name_off != 0 || btf_type_header.kind_flag) {
+    return BTFError{
+        BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidFuncProtoBTFTypeEncoding,
+            file_range,
+        },
+    };
+  }
+
+  try {
+    FuncProtoBTFType output;
+
+    for (std::uint32_t i = 0; i < btf_type_header.vlen; ++i) {
+      FuncProtoBTFType::Param param{};
+
+      auto param_name_off = file_reader.u32();
+      if (param_name_off != 0) {
+        param_name_off += btf_header.hdr_len + btf_header.str_off;
+
+        auto param_name_res = parseString(file_reader, param_name_off);
+        if (param_name_res.failed()) {
+          return param_name_res.takeError();
+        }
+
+        param.opt_name = param_name_res.takeValue();
+      }
+
+      param.type = file_reader.u32();
+
+      output.param_list.push_back(std::move(param));
+    }
+
+    const auto &last_element = output.param_list.back();
+    if (!last_element.opt_name.has_value() && last_element.type == 0) {
+      output.param_list.pop_back();
+      output.variadic = true;
     }
 
     return BTFType{output};

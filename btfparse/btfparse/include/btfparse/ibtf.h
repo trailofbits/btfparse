@@ -32,6 +32,7 @@ struct BTFErrorInformation final {
     InvalidArrayBTFTypeEncoding,
     InvalidTypedefBTFTypeEncoding,
     InvalidEnumBTFTypeEncoding,
+    InvalidFuncProtoBTFTypeEncoding,
   };
 
   struct FileRange final {
@@ -94,6 +95,10 @@ struct BTFErrorInformationPrinter final {
     case BTFErrorInformation::Code::InvalidEnumBTFTypeEncoding:
       buffer << "Invalid encoding of `Enum` BTFType";
       break;
+
+    case BTFErrorInformation::Code::InvalidFuncProtoBTFTypeEncoding:
+      buffer << "Invalid encoding of `FuncProto` BTFType";
+      break;
     }
 
     buffer << "'";
@@ -152,9 +157,21 @@ struct EnumBTFType final {
   ValueList value_list;
 };
 
+struct FuncProtoBTFType final {
+  struct Param final {
+    std::optional<std::string> opt_name;
+    std::uint32_t type{};
+  };
+
+  using ParamList = std::vector<Param>;
+
+  ParamList param_list;
+  bool variadic{false};
+};
+
 using BTFType =
     std::variant<std::monostate, IntBTFType, PtrBTFType, ConstBTFType,
-                 ArrayBTFType, TypedefBTFType, EnumBTFType>;
+                 ArrayBTFType, TypedefBTFType, EnumBTFType, FuncProtoBTFType>;
 
 class IBTF {
 public:
