@@ -19,6 +19,9 @@ const std::uint32_t kLittleEndianMagicValue{0xEB9F};
 const std::uint32_t kBigEndianMagicValue{0x9FEB};
 const std::size_t kBTFTypeHeaderSize{12U};
 const std::size_t kIntBTFTypeSize{4U};
+const std::size_t kArrayBTFTypeSize{12U};
+const std::size_t kEnumValueBTFTypeSize{8U};
+const std::size_t kStructOrUnionMemberSize{12U};
 
 struct BTFHeader final {
   std::uint16_t magic{};
