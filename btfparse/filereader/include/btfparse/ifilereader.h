@@ -79,8 +79,10 @@ class IFileReader {
 public:
   using Ptr = std::unique_ptr<IFileReader>;
 
-  static Result<Ptr, FileReaderError> open(const std::filesystem::path &path);
-  static Result<Ptr, FileReaderError> createFromStream(IStream::Ptr stream);
+  static Result<Ptr, FileReaderError>
+  open(const std::filesystem::path &path) noexcept;
+  static Result<Ptr, FileReaderError>
+  createFromStream(IStream::Ptr stream) noexcept;
 
   IFileReader() = default;
   virtual ~IFileReader() = default;

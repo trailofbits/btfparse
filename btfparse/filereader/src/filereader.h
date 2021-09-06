@@ -14,7 +14,9 @@ namespace btfparse {
 
 class FileReader final : public IFileReader {
 public:
-  static Result<IFileReader::Ptr, FileReaderError> create(IStream::Ptr stream);
+  static Result<IFileReader::Ptr, FileReaderError>
+  create(IStream::Ptr stream) noexcept;
+
   virtual ~FileReader() override;
 
   virtual void setEndianness(bool little_endian) override;

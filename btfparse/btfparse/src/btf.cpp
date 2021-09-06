@@ -14,23 +14,23 @@ namespace btfparse {
 
 namespace {
 
-const std::unordered_map<std::uint8_t, BTFTypeParser> kBTFParserMap{
-    {BTFKind_Int, BTF::parseIntData},
-    {BTFKind_Ptr, BTF::parsePtrData},
-    {BTFKind_Const, BTF::parseConstData},
-    {BTFKind_Array, BTF::parseArrayData},
-    {BTFKind_Typedef, BTF::parseTypedefData},
-    {BTFKind_Enum, BTF::parseEnumData},
-    {BTFKind_FuncProto, BTF::parseFuncProtoData},
-    {BTFKind_Volatile, BTF::parseVolatileData},
-    {BTFKind_Struct, BTF::parseStructData},
-    {BTFKind_Union, BTF::parseUnionData},
-    {BTFKind_Fwd, BTF::parseFwdData},
-    {BTFKind_Func, BTF::parseFuncData},
-    {BTFKind_Float, BTF::parseFloatData},
-    {BTFKind_Restrict, BTF::parseRestrictData},
-    {BTFKind_Var, BTF::parseVarData},
-    {BTFKind_DataSec, BTF::parseDataSecData}};
+const std::unordered_map<BTFKind, BTFTypeParser> kBTFParserMap{
+    {BTFKind::Int, BTF::parseIntData},
+    {BTFKind::Ptr, BTF::parsePtrData},
+    {BTFKind::Const, BTF::parseConstData},
+    {BTFKind::Array, BTF::parseArrayData},
+    {BTFKind::Typedef, BTF::parseTypedefData},
+    {BTFKind::Enum, BTF::parseEnumData},
+    {BTFKind::FuncProto, BTF::parseFuncProtoData},
+    {BTFKind::Volatile, BTF::parseVolatileData},
+    {BTFKind::Struct, BTF::parseStructData},
+    {BTFKind::Union, BTF::parseUnionData},
+    {BTFKind::Fwd, BTF::parseFwdData},
+    {BTFKind::Func, BTF::parseFuncData},
+    {BTFKind::Float, BTF::parseFloatData},
+    {BTFKind::Restrict, BTF::parseRestrictData},
+    {BTFKind::Var, BTF::parseVarData},
+    {BTFKind::DataSec, BTF::parseDataSecData}};
 
 /// TODO: Check again how this is encoded; the `kind_flag` value changes how
 /// `offset` works
@@ -40,9 +40,9 @@ parseStructOrUnionData(Type &output, const BTFHeader &btf_header,
                        const BTFTypeHeader &btf_type_header,
                        IFileReader &file_reader) noexcept {
 
-  static_assert(std::is_same<Type, StructBPFType>::value ||
-                    std::is_same<Type, UnionBPFType>::value,
-                "Type must be either StructBPFType or UnionBPFType");
+  static_assert(std::is_same<Type, StructBTFType>::value ||
+                    std::is_same<Type, UnionBTFType>::value,
+                "Type must be either StructBTFType or UnionBTFType");
 
   try {
     output = {};
@@ -78,6 +78,8 @@ parseStructOrUnionData(Type &output, const BTFHeader &btf_header,
 
       member.type = file_reader.u32();
       member.offset = file_reader.u32();
+
+      output.member_list.push_back(std::move(member));
     }
 
     return std::nullopt;
@@ -94,6 +96,29 @@ struct BTF::PrivateData final {
 };
 
 BTF::~BTF() {}
+
+std::optional<BTFType> BTF::getType(std::uint32_t id) const noexcept {
+  if (id >= d->btf_type_list.size()) {
+    return std::nullopt;
+  }
+
+  return d->btf_type_list.at(id);
+}
+
+std::optional<BTFKind> BTF::getKind(std::uint32_t id) const noexcept {
+  if (id >= d->btf_type_list.size()) {
+    return std::nullopt;
+  }
+
+  const auto &btf_type = d->btf_type_list.at(id);
+  return getBTFTypeKind(btf_type);
+}
+
+std::uint32_t BTF::count() const noexcept {
+  return static_cast<std::uint32_t>(d->btf_type_list.size());
+}
+
+BTFTypeList BTF::getAll() const noexcept { return d->btf_type_list; }
 
 BTF::BTF(const std::filesystem::path &path) : d(new PrivateData) {
   auto file_reader_res = IFileReader::open(path);
@@ -217,12 +242,14 @@ BTF::readBTFHeader(IFileReader &file_reader) noexcept {
   }
 }
 
-Result<BTF::BTFTypeList, BTFError>
+Result<BTFTypeList, BTFError>
 BTF::parseTypeSection(const BTFHeader &btf_header,
                       IFileReader &file_reader) noexcept {
 
   try {
+    // Type 0 is always reserved for Void
     BTFTypeList btf_type_list;
+    btf_type_list.push_back(BTFType{std::monostate()});
 
     auto type_section_start_offset = btf_header.hdr_len + btf_header.type_off;
     auto type_section_end_offset =
@@ -243,16 +270,22 @@ BTF::parseTypeSection(const BTFHeader &btf_header,
 
       auto btf_type_header = btf_type_header_res.takeValue();
 
-      auto parser_it = kBTFParserMap.find(btf_type_header.kind);
-      if (parser_it == kBTFParserMap.end()) {
-        std::cout << "Unsupported entry of kind "
-                  << static_cast<int>(btf_type_header.kind) << std::endl;
+      BTFErrorInformation::FileRange file_range{current_offset,
+                                                kBTFTypeHeaderSize};
 
-        BTFErrorInformation::FileRange file_range{current_offset,
-                                                  kBTFTypeHeaderSize};
-
+      if (btf_type_header.kind > static_cast<std::uint8_t>(BTFKind::Float)) {
         return BTFError{
             BTFErrorInformation{BTFErrorInformation::Code::InvalidBTFKind,
+                                file_range},
+        };
+      }
+
+      auto btf_kind = static_cast<BTFKind>(btf_type_header.kind);
+
+      auto parser_it = kBTFParserMap.find(btf_kind);
+      if (parser_it == kBTFParserMap.end()) {
+        return BTFError{
+            BTFErrorInformation{BTFErrorInformation::Code::UnsupportedBTFKind,
                                 file_range},
         };
       }
@@ -342,34 +375,36 @@ BTF::parseIntData(const BTFHeader &btf_header,
 
     IntBTFType output;
     output.name = name_res.takeValue();
+    output.size = btf_type_header.size_or_type;
 
     auto integer_info = file_reader.u32();
 
     auto encoding = (integer_info & 0x0F000000UL) >> 24;
-    output.is_signed = (encoding & 1) != 0;
-    output.is_char = (encoding & 2) != 0;
-    output.is_bool = (encoding & 4) != 0;
 
-    std::size_t encoding_flag_count{0U};
-    if (output.is_signed) {
-      ++encoding_flag_count;
-    }
+    int is_signed = (encoding & 1) != 0;
+    int is_char = (encoding & 2) != 0;
+    int is_bool = (encoding & 4) != 0;
 
-    if (output.is_char) {
-      ++encoding_flag_count;
-    }
-
-    if (output.is_bool) {
-      ++encoding_flag_count;
-    }
-
-    if (encoding_flag_count > 1U) {
+    if (is_signed + is_char + is_bool > 1) {
       return BTFError{
           BTFErrorInformation{
               BTFErrorInformation::Code::InvalidIntBTFTypeEncoding,
               file_range,
           },
       };
+    }
+
+    if (is_signed != 0) {
+      output.encoding = IntBTFType::Encoding::Signed;
+
+    } else if (is_char != 0) {
+      output.encoding = IntBTFType::Encoding::Char;
+
+    } else if (is_bool != 0) {
+      output.encoding = IntBTFType::Encoding::Bool;
+
+    } else {
+      output.encoding = IntBTFType::Encoding::None;
     }
 
     output.bits = integer_info & 0x000000ff;
@@ -513,6 +548,7 @@ BTF::parseTypedefData(const BTFHeader &btf_header,
 
   TypedefBTFType output;
   output.name = name_res.takeValue();
+  output.type = btf_type_header.size_or_type;
 
   return BTFType{output};
 }
@@ -553,6 +589,7 @@ BTF::parseEnumData(const BTFHeader &btf_header,
 
   try {
     EnumBTFType output;
+    output.size = btf_type_header.size_or_type;
 
     if (btf_type_header.name_off != 0) {
       auto name_offset =
@@ -620,6 +657,7 @@ BTF::parseFuncProtoData(const BTFHeader &btf_header,
 
   try {
     FuncProtoBTFType output;
+    output.return_type = btf_type_header.size_or_type;
 
     for (std::uint32_t i = 0; i < btf_type_header.vlen; ++i) {
       FuncProtoBTFType::Param param{};
@@ -687,7 +725,7 @@ BTF::parseStructData(const BTFHeader &btf_header,
                      const BTFTypeHeader &btf_type_header,
                      IFileReader &file_reader) noexcept {
 
-  StructBPFType output;
+  StructBTFType output;
   auto opt_error =
       parseStructOrUnionData(output, btf_header, btf_type_header, file_reader);
 
@@ -703,7 +741,7 @@ BTF::parseUnionData(const BTFHeader &btf_header,
                     const BTFTypeHeader &btf_type_header,
                     IFileReader &file_reader) noexcept {
 
-  UnionBPFType output;
+  UnionBTFType output;
   auto opt_error =
       parseStructOrUnionData(output, btf_header, btf_type_header, file_reader);
 

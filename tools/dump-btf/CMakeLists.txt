@@ -8,6 +8,9 @@
 
 add_executable(dump-btf
   src/main.cpp
+
+  src/utils.h
+  src/utils.cpp
 )
 
 target_link_libraries(dump-btf PRIVATE

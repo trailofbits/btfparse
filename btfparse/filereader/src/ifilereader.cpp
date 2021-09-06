@@ -14,12 +14,26 @@
 namespace btfparse {
 
 Result<IFileReader::Ptr, FileReaderError>
-IFileReader::open(const std::filesystem::path &path) {
-  return FileReader::create(FstreamAdapter::create(path));
+IFileReader::open(const std::filesystem::path &path) noexcept {
+  FstreamAdapter::Ptr stream_ptr;
+
+  try {
+    stream_ptr = FstreamAdapter::create(path);
+
+  } catch (const std::bad_alloc &) {
+    return FileReaderError(FileReaderErrorInformation{
+        FileReaderErrorInformation::Code::MemoryAllocationFailure,
+    });
+
+  } catch (const FileReaderError &e) {
+    return e;
+  }
+
+  return FileReader::create(std::move(stream_ptr));
 }
 
 Result<IFileReader::Ptr, FileReaderError>
-IFileReader::createFromStream(IStream::Ptr stream) {
+IFileReader::createFromStream(IStream::Ptr stream) noexcept {
   return FileReader::create(std::move(stream));
 }
 

@@ -19,7 +19,7 @@ struct FileReader::PrivateData final {
 };
 
 Result<IFileReader::Ptr, FileReaderError>
-FileReader::create(IStream::Ptr stream) {
+FileReader::create(IStream::Ptr stream) noexcept {
   try {
     return Ptr(new FileReader(std::move(stream)));
 

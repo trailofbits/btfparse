@@ -27,6 +27,7 @@ struct BTFErrorInformation final {
     IOError,
     InvalidMagicValue,
     InvalidBTFKind,
+    UnsupportedBTFKind,
     InvalidIntBTFTypeEncoding,
     InvalidPtrBTFTypeEncoding,
     InvalidArrayBTFTypeEncoding,
@@ -81,6 +82,10 @@ struct BTFErrorInformationPrinter final {
 
     case BTFErrorInformation::Code::InvalidBTFKind:
       buffer << "Invalid BTF kind";
+      break;
+
+    case BTFErrorInformation::Code::UnsupportedBTFKind:
+      buffer << "Unsupported BTF kind";
       break;
 
     case BTFErrorInformation::Code::InvalidIntBTFTypeEncoding:
@@ -151,11 +156,16 @@ struct BTFErrorInformationPrinter final {
 using BTFError = Error<BTFErrorInformation, BTFErrorInformationPrinter>;
 
 struct IntBTFType final {
-  std::string name;
+  enum class Encoding {
+    None,
+    Signed,
+    Char,
+    Bool,
+  };
 
-  bool is_signed{false};
-  bool is_char{false};
-  bool is_bool{false};
+  std::string name;
+  std::uint32_t size{};
+  Encoding encoding{Encoding::None};
 
   std::uint8_t offset{};
   std::uint8_t bits{};
@@ -189,6 +199,7 @@ struct EnumBTFType final {
   using ValueList = std::vector<Value>;
 
   std::optional<std::string> opt_name;
+  std::uint32_t size{};
   ValueList value_list;
 };
 
@@ -200,6 +211,7 @@ struct FuncProtoBTFType final {
 
   using ParamList = std::vector<Param>;
 
+  std::uint32_t return_type{};
   ParamList param_list;
   bool variadic{false};
 };
@@ -208,7 +220,7 @@ struct VolatileBTFType final {
   std::uint32_t type{};
 };
 
-struct StructBPFType final {
+struct StructBTFType final {
   struct Member final {
     std::optional<std::string> opt_name;
     std::uint32_t type{};
@@ -222,7 +234,7 @@ struct StructBPFType final {
   MemberList member_list;
 };
 
-struct UnionBPFType final {
+struct UnionBTFType final {
   struct Member final {
     std::optional<std::string> opt_name;
     std::uint32_t type{};
@@ -275,19 +287,49 @@ struct DataSecBTFType final {
   VariableList variable_list;
 };
 
+enum class BTFKind {
+  Void = 0,
+  Int = 1,
+  Ptr = 2,
+  Array = 3,
+  Struct = 4,
+  Union = 5,
+  Enum = 6,
+  Fwd = 7,
+  Typedef = 8,
+  Volatile = 9,
+  Const = 10,
+  Restrict = 11,
+  Func = 12,
+  FuncProto = 13,
+  Var = 14,
+  DataSec = 15,
+  Float = 16,
+};
+
 using BTFType =
-    std::variant<std::monostate, IntBTFType, PtrBTFType, ConstBTFType,
-                 ArrayBTFType, TypedefBTFType, EnumBTFType, FuncProtoBTFType,
-                 VolatileBTFType, StructBPFType, UnionBPFType, FwdBTFType,
-                 FuncBTFType, FloatBTFType, RestrictBTFType, VarBTFType,
-                 DataSecBTFType>;
+    std::variant<std::monostate, IntBTFType, PtrBTFType, ArrayBTFType,
+                 StructBTFType, UnionBTFType, EnumBTFType, FwdBTFType,
+                 TypedefBTFType, VolatileBTFType, ConstBTFType, RestrictBTFType,
+                 FuncBTFType, FuncProtoBTFType, VarBTFType, DataSecBTFType,
+                 FloatBTFType>;
+
+using BTFTypeList = std::vector<BTFType>;
 
 class IBTF {
 public:
   using Ptr = std::unique_ptr<IBTF>;
 
   static Result<Ptr, BTFError>
-  createFromPath(const std::filesystem::path &path);
+  createFromPath(const std::filesystem::path &path) noexcept;
+
+  virtual std::optional<BTFType> getType(std::uint32_t id) const noexcept = 0;
+  virtual std::optional<BTFKind> getKind(std::uint32_t id) const noexcept = 0;
+
+  virtual std::uint32_t count() const noexcept = 0;
+  virtual BTFTypeList getAll() const noexcept = 0;
+
+  static BTFKind getBTFTypeKind(const BTFType &btf_type) noexcept;
 
   IBTF() = default;
   virtual ~IBTF() = default;

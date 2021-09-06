@@ -13,7 +13,7 @@
 namespace btfparse {
 
 Result<IBTF::Ptr, BTFError>
-IBTF::createFromPath(const std::filesystem::path &path) {
+IBTF::createFromPath(const std::filesystem::path &path) noexcept {
   try {
     return Ptr(new BTF(path));
 
@@ -25,6 +25,10 @@ IBTF::createFromPath(const std::filesystem::path &path) {
   } catch (const BTFError &e) {
     return e;
   }
+}
+
+BTFKind IBTF::getBTFTypeKind(const BTFType &btf_type) noexcept {
+  return static_cast<BTFKind>(btf_type.index());
 }
 
 } // namespace btfparse

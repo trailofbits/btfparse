@@ -25,6 +25,15 @@ class BTF final : public IBTF {
 public:
   virtual ~BTF() override;
 
+  virtual std::optional<BTFType>
+  getType(std::uint32_t id) const noexcept override;
+
+  virtual std::optional<BTFKind>
+  getKind(std::uint32_t id) const noexcept override;
+
+  virtual std::uint32_t count() const noexcept override;
+  virtual BTFTypeList getAll() const noexcept override;
+
 private:
   struct PrivateData;
   std::unique_ptr<PrivateData> d;
@@ -32,8 +41,6 @@ private:
   BTF(const std::filesystem::path &path);
 
 public:
-  using BTFTypeList = std::vector<BTFType>;
-
   static BTFError convertFileReaderError(const FileReaderError &error) noexcept;
 
   static std::optional<BTFError>

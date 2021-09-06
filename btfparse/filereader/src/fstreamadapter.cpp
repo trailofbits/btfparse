@@ -57,7 +57,7 @@ FstreamAdapter::FstreamAdapter(const std::filesystem::path &path)
     : input_stream(path.c_str(), std::ios::in | std::ios::binary) {
   if (!input_stream) {
     throw FileReaderError(FileReaderErrorInformation{
-        FileReaderErrorInformation::Code::MemoryAllocationFailure,
+        FileReaderErrorInformation::Code::FileNotFound,
     });
   }
 }
