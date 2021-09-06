@@ -29,7 +29,8 @@ const std::unordered_map<std::uint8_t, BTFTypeParser> kBTFParserMap{
     {BTFKind_Func, BTF::parseFuncData},
     {BTFKind_Float, BTF::parseFloatData},
     {BTFKind_Restrict, BTF::parseRestrictData},
-    {BTFKind_Var, BTF::parseVarData}};
+    {BTFKind_Var, BTF::parseVarData},
+    {BTFKind_DataSec, BTF::parseDataSecData}};
 
 /// TODO: Check again how this is encoded; the `kind_flag` value changes how
 /// `offset` works
@@ -871,7 +872,7 @@ BTF::parseVarData(const BTFHeader &btf_header,
 
     return BTFError{
         BTFErrorInformation{
-            BTFErrorInformation::Code::InvalidRestrictBTFTypeEncoding,
+            BTFErrorInformation::Code::InvalidVarBTFTypeEncoding,
             file_range,
         },
     };
@@ -891,6 +892,53 @@ BTF::parseVarData(const BTFHeader &btf_header,
 
   try {
     output.linkage = file_reader.u32();
+
+    return BTFType{output};
+
+  } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
+}
+
+Result<BTFType, BTFError>
+BTF::parseDataSecData(const BTFHeader &btf_header,
+                      const BTFTypeHeader &btf_type_header,
+                      IFileReader &file_reader) noexcept {
+
+  BTFErrorInformation::FileRange file_range{
+      file_reader.offset() - kBTFTypeHeaderSize,
+      kBTFTypeHeaderSize + (btf_type_header.vlen * kVarSecInfoSize)};
+
+  if (btf_type_header.name_off == 0 || btf_type_header.kind_flag) {
+    return BTFError{
+        BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidDataSecBTFTypeEncoding,
+            file_range,
+        },
+    };
+  }
+
+  auto name_offset =
+      btf_type_header.name_off + btf_header.hdr_len + btf_header.str_off;
+
+  auto name_res = BTF::parseString(file_reader, name_offset);
+  if (name_res.failed()) {
+    return name_res.takeError();
+  }
+
+  DataSecBTFType output;
+  output.name = name_res.takeValue();
+  output.size = btf_type_header.size_or_type;
+
+  try {
+    for (std::uint32_t i = 0; i < btf_type_header.vlen; ++i) {
+      DataSecBTFType::Variable variable{};
+      variable.type = file_reader.u32();
+      variable.offset = file_reader.u32();
+      variable.size = file_reader.u32();
+
+      output.variable_list.push_back(std::move(variable));
+    }
 
     return BTFType{output};
 

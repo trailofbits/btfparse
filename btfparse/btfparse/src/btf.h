@@ -124,6 +124,11 @@ public:
                const BTFTypeHeader &btf_type_header,
                IFileReader &file_reader) noexcept;
 
+  static Result<BTFType, BTFError>
+  parseDataSecData(const BTFHeader &btf_header,
+                   const BTFTypeHeader &btf_type_header,
+                   IFileReader &file_reader) noexcept;
+
   static Result<std::string, BTFError>
   parseString(IFileReader &file_reader, std::uint64_t offset) noexcept;
 

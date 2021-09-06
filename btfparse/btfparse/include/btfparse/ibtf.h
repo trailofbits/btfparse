@@ -39,6 +39,7 @@ struct BTFErrorInformation final {
     InvalidFloatBTFTypeEncoding,
     InvalidRestrictBTFTypeEncoding,
     InvalidVarBTFTypeEncoding,
+    InvalidDataSecBTFTypeEncoding,
   };
 
   struct FileRange final {
@@ -128,6 +129,10 @@ struct BTFErrorInformationPrinter final {
 
     case BTFErrorInformation::Code::InvalidVarBTFTypeEncoding:
       buffer << "Invalid encoding for `Var` BTFType";
+      break;
+
+    case BTFErrorInformation::Code::InvalidDataSecBTFTypeEncoding:
+      buffer << "Invalid encoding for `DataSec` BTFType";
       break;
     }
 
@@ -256,11 +261,26 @@ struct VarBTFType final {
   std::uint32_t linkage{};
 };
 
+struct DataSecBTFType final {
+  struct Variable final {
+    std::uint32_t type{};
+    std::uint32_t offset;
+    std::uint32_t size{};
+  };
+
+  using VariableList = std::vector<Variable>;
+
+  std::string name;
+  std::uint32_t size{};
+  VariableList variable_list;
+};
+
 using BTFType =
     std::variant<std::monostate, IntBTFType, PtrBTFType, ConstBTFType,
                  ArrayBTFType, TypedefBTFType, EnumBTFType, FuncProtoBTFType,
                  VolatileBTFType, StructBPFType, UnionBPFType, FwdBTFType,
-                 FuncBTFType, FloatBTFType, RestrictBTFType, VarBTFType>;
+                 FuncBTFType, FloatBTFType, RestrictBTFType, VarBTFType,
+                 DataSecBTFType>;
 
 class IBTF {
 public:
