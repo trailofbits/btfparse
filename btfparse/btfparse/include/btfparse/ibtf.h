@@ -35,6 +35,7 @@ struct BTFErrorInformation final {
     InvalidFuncProtoBTFTypeEncoding,
     InvalidVolatileBTFTypeEncoding,
     InvalidFwdBTFTypeEncoding,
+    InvalidFuncBTFTypeEncoding,
   };
 
   struct FileRange final {
@@ -108,6 +109,10 @@ struct BTFErrorInformationPrinter final {
 
     case BTFErrorInformation::Code::InvalidFwdBTFTypeEncoding:
       buffer << "Invalid encoding for `Fwd` BTFType";
+      break;
+
+    case BTFErrorInformation::Code::InvalidFuncBTFTypeEncoding:
+      buffer << "Invalid encoding for `Func` BTFType";
       break;
     }
 
@@ -216,10 +221,16 @@ struct FwdBTFType final {
   bool is_union{false};
 };
 
+struct FuncBTFType final {
+  std::string name;
+  std::uint32_t type{};
+};
+
 using BTFType =
     std::variant<std::monostate, IntBTFType, PtrBTFType, ConstBTFType,
                  ArrayBTFType, TypedefBTFType, EnumBTFType, FuncProtoBTFType,
-                 VolatileBTFType, StructBPFType, UnionBPFType, FwdBTFType>;
+                 VolatileBTFType, StructBPFType, UnionBPFType, FwdBTFType,
+                 FuncBTFType>;
 
 class IBTF {
 public:
