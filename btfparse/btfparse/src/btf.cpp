@@ -525,9 +525,23 @@ BTF::parseEnumData(const BTFHeader &btf_header,
       file_reader.offset() - kBTFTypeHeaderSize,
       kBTFTypeHeaderSize + kIntBTFTypeSize};
 
-  if (btf_type_header.kind_flag || btf_type_header.vlen == 0 ||
-      btf_type_header.size_or_type != 4) {
+  if (btf_type_header.kind_flag || btf_type_header.vlen == 0) {
+    return BTFError{
+        BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidEnumBTFTypeEncoding,
+            file_range,
+        },
+    };
+  }
 
+  switch (btf_type_header.size_or_type) {
+  case 1:
+  case 2:
+  case 4:
+  case 8:
+    break;
+
+  default:
     return BTFError{
         BTFErrorInformation{
             BTFErrorInformation::Code::InvalidEnumBTFTypeEncoding,
