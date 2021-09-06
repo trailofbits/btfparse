@@ -27,7 +27,8 @@ const std::unordered_map<std::uint8_t, BTFTypeParser> kBTFParserMap{
     {BTFKind_Union, BTF::parseUnionData},
     {BTFKind_Fwd, BTF::parseFwdData},
     {BTFKind_Func, BTF::parseFuncData},
-    {BTFKind_Float, BTF::parseFloatData}};
+    {BTFKind_Float, BTF::parseFloatData},
+    {BTFKind_Restrict, BTF::parseRestrictData}};
 
 /// TODO: Check again how this is encoded; the `kind_flag` value changes how
 /// `offset` works
@@ -826,6 +827,31 @@ BTF::parseFloatData(const BTFHeader &btf_header,
   FloatBTFType output;
   output.name = name_res.takeValue();
   output.size = btf_type_header.size_or_type;
+
+  return BTFType{output};
+}
+
+Result<BTFType, BTFError>
+BTF::parseRestrictData(const BTFHeader &btf_header,
+                       const BTFTypeHeader &btf_type_header,
+                       IFileReader &file_reader) noexcept {
+
+  BTFErrorInformation::FileRange file_range{
+      file_reader.offset() - kBTFTypeHeaderSize, kBTFTypeHeaderSize};
+
+  if (btf_type_header.name_off != 0 || btf_type_header.kind_flag ||
+      btf_type_header.vlen != 0) {
+
+    return BTFError{
+        BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidRestrictBTFTypeEncoding,
+            file_range,
+        },
+    };
+  }
+
+  RestrictBTFType output;
+  output.type = btf_type_header.size_or_type;
 
   return BTFType{output};
 }
