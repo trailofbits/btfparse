@@ -38,6 +38,7 @@ struct BTFErrorInformation final {
     InvalidFuncBTFTypeEncoding,
     InvalidFloatBTFTypeEncoding,
     InvalidRestrictBTFTypeEncoding,
+    InvalidVarBTFTypeEncoding,
   };
 
   struct FileRange final {
@@ -123,6 +124,10 @@ struct BTFErrorInformationPrinter final {
 
     case BTFErrorInformation::Code::InvalidRestrictBTFTypeEncoding:
       buffer << "Invalid encoding for `Restrict` BTFType";
+      break;
+
+    case BTFErrorInformation::Code::InvalidVarBTFTypeEncoding:
+      buffer << "Invalid encoding for `Var` BTFType";
       break;
     }
 
@@ -245,11 +250,17 @@ struct RestrictBTFType final {
   std::uint32_t type{};
 };
 
+struct VarBTFType final {
+  std::string name;
+  std::uint32_t type{};
+  std::uint32_t linkage{};
+};
+
 using BTFType =
     std::variant<std::monostate, IntBTFType, PtrBTFType, ConstBTFType,
                  ArrayBTFType, TypedefBTFType, EnumBTFType, FuncProtoBTFType,
                  VolatileBTFType, StructBPFType, UnionBPFType, FwdBTFType,
-                 FuncBTFType, FloatBTFType, RestrictBTFType>;
+                 FuncBTFType, FloatBTFType, RestrictBTFType, VarBTFType>;
 
 class IBTF {
 public:

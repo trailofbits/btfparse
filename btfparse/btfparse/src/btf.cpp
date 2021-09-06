@@ -28,7 +28,8 @@ const std::unordered_map<std::uint8_t, BTFTypeParser> kBTFParserMap{
     {BTFKind_Fwd, BTF::parseFwdData},
     {BTFKind_Func, BTF::parseFuncData},
     {BTFKind_Float, BTF::parseFloatData},
-    {BTFKind_Restrict, BTF::parseRestrictData}};
+    {BTFKind_Restrict, BTF::parseRestrictData},
+    {BTFKind_Var, BTF::parseVarData}};
 
 /// TODO: Check again how this is encoded; the `kind_flag` value changes how
 /// `offset` works
@@ -854,6 +855,48 @@ BTF::parseRestrictData(const BTFHeader &btf_header,
   output.type = btf_type_header.size_or_type;
 
   return BTFType{output};
+}
+
+Result<BTFType, BTFError>
+BTF::parseVarData(const BTFHeader &btf_header,
+                  const BTFTypeHeader &btf_type_header,
+                  IFileReader &file_reader) noexcept {
+
+  BTFErrorInformation::FileRange file_range{file_reader.offset() -
+                                                kBTFTypeHeaderSize,
+                                            kBTFTypeHeaderSize + kVarDataSize};
+
+  if (btf_type_header.name_off != 0 || btf_type_header.kind_flag ||
+      btf_type_header.vlen != 0) {
+
+    return BTFError{
+        BTFErrorInformation{
+            BTFErrorInformation::Code::InvalidRestrictBTFTypeEncoding,
+            file_range,
+        },
+    };
+  }
+
+  auto name_offset =
+      btf_type_header.name_off + btf_header.hdr_len + btf_header.str_off;
+
+  auto name_res = BTF::parseString(file_reader, name_offset);
+  if (name_res.failed()) {
+    return name_res.takeError();
+  }
+
+  VarBTFType output;
+  output.name = name_res.takeValue();
+  output.type = btf_type_header.size_or_type;
+
+  try {
+    output.linkage = file_reader.u32();
+
+    return BTFType{output};
+
+  } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
 }
 
 Result<std::string, BTFError> BTF::parseString(IFileReader &file_reader,

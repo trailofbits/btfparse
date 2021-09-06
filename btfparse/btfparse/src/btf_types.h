@@ -22,6 +22,7 @@ const std::size_t kIntBTFTypeSize{4U};
 const std::size_t kArrayBTFTypeSize{12U};
 const std::size_t kEnumValueBTFTypeSize{8U};
 const std::size_t kStructOrUnionMemberSize{12U};
+const std::size_t kVarDataSize{4U};
 
 struct BTFHeader final {
   std::uint16_t magic{};
