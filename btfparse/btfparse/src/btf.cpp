@@ -23,9 +23,66 @@ const std::unordered_map<std::uint8_t, BTFTypeParser> kBTFParserMap{
     {BTFKind_Enum, BTF::parseEnumData},
     {BTFKind_FuncProto, BTF::parseFuncProtoData},
     {BTFKind_Volatile, BTF::parseVolatileData},
+    {BTFKind_Struct, BTF::parseStructData},
+    {BTFKind_Union, BTF::parseUnionData},
 };
 
+/// TODO: Check again how this is encoded; the `kind_flag` value changes how
+/// `offset` works
+template <typename Type>
+std::optional<BTFError>
+parseStructOrUnionData(Type &output, const BTFHeader &btf_header,
+                       const BTFTypeHeader &btf_type_header,
+                       IFileReader &file_reader) noexcept {
+
+  static_assert(std::is_same<Type, StructBPFType>::value ||
+                    std::is_same<Type, UnionBPFType>::value,
+                "Type must be either StructBPFType or UnionBPFType");
+
+  try {
+    output = {};
+
+    output.size = btf_type_header.size_or_type;
+
+    if (btf_type_header.name_off != 0) {
+      auto name_offset =
+          btf_type_header.name_off + btf_header.hdr_len + btf_header.str_off;
+
+      auto name_res = BTF::parseString(file_reader, name_offset);
+      if (name_res.failed()) {
+        return name_res.takeError();
+      }
+
+      output.opt_name = name_res.takeValue();
+    }
+
+    for (std::uint32_t i = 0; i < btf_type_header.vlen; ++i) {
+      typename Type::Member member{};
+
+      auto member_name_off = file_reader.u32();
+      if (member_name_off != 0) {
+        member_name_off += btf_header.hdr_len + btf_header.str_off;
+
+        auto member_name_res = BTF::parseString(file_reader, member_name_off);
+        if (member_name_res.failed()) {
+          return member_name_res.takeError();
+        }
+
+        member.opt_name = member_name_res.takeValue();
+      }
+
+      member.type = file_reader.u32();
+      member.offset = file_reader.u32();
+    }
+
+    return std::nullopt;
+
+  } catch (const FileReaderError &error) {
+    return BTF::convertFileReaderError(error);
+  }
 }
+
+} // namespace
 
 struct BTF::PrivateData final {
   BTFTypeList btf_type_list;
@@ -569,10 +626,13 @@ BTF::parseFuncProtoData(const BTFHeader &btf_header,
       output.param_list.push_back(std::move(param));
     }
 
-    const auto &last_element = output.param_list.back();
-    if (!last_element.opt_name.has_value() && last_element.type == 0) {
-      output.param_list.pop_back();
-      output.variadic = true;
+    if (!output.param_list.empty()) {
+      const auto &last_element = output.param_list.back();
+
+      if (!last_element.opt_name.has_value() && last_element.type == 0) {
+        output.param_list.pop_back();
+        output.variadic = true;
+      }
     }
 
     return BTFType{output};
@@ -604,6 +664,38 @@ BTF::parseVolatileData(const BTFHeader &btf_header,
 
   VolatileBTFType output;
   output.type = btf_type_header.size_or_type;
+
+  return BTFType{output};
+}
+
+Result<BTFType, BTFError>
+BTF::parseStructData(const BTFHeader &btf_header,
+                     const BTFTypeHeader &btf_type_header,
+                     IFileReader &file_reader) noexcept {
+
+  StructBPFType output;
+  auto opt_error =
+      parseStructOrUnionData(output, btf_header, btf_type_header, file_reader);
+
+  if (opt_error.has_value()) {
+    return opt_error.value();
+  }
+
+  return BTFType{output};
+}
+
+Result<BTFType, BTFError>
+BTF::parseUnionData(const BTFHeader &btf_header,
+                    const BTFTypeHeader &btf_type_header,
+                    IFileReader &file_reader) noexcept {
+
+  UnionBPFType output;
+  auto opt_error =
+      parseStructOrUnionData(output, btf_header, btf_type_header, file_reader);
+
+  if (opt_error.has_value()) {
+    return opt_error.value();
+  }
 
   return BTFType{output};
 }

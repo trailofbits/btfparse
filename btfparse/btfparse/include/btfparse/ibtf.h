@@ -78,31 +78,31 @@ struct BTFErrorInformationPrinter final {
       break;
 
     case BTFErrorInformation::Code::InvalidIntBTFTypeEncoding:
-      buffer << "Invalid encoding of `Int` BTFType";
+      buffer << "Invalid encoding for `Int` BTFType";
       break;
 
     case BTFErrorInformation::Code::InvalidPtrBTFTypeEncoding:
-      buffer << "Invalid encoding of `Ptr` BTFType";
+      buffer << "Invalid encoding for `Ptr` BTFType";
       break;
 
     case BTFErrorInformation::Code::InvalidArrayBTFTypeEncoding:
-      buffer << "Invalid encoding of `Array` BTFType";
+      buffer << "Invalid encoding for `Array` BTFType";
       break;
 
     case BTFErrorInformation::Code::InvalidTypedefBTFTypeEncoding:
-      buffer << "Invalid encoding of `Typedef` BTFType";
+      buffer << "Invalid encoding for `Typedef` BTFType";
       break;
 
     case BTFErrorInformation::Code::InvalidEnumBTFTypeEncoding:
-      buffer << "Invalid encoding of `Enum` BTFType";
+      buffer << "Invalid encoding for `Enum` BTFType";
       break;
 
     case BTFErrorInformation::Code::InvalidFuncProtoBTFTypeEncoding:
-      buffer << "Invalid encoding of `FuncProto` BTFType";
+      buffer << "Invalid encoding for `FuncProto` BTFType";
       break;
 
     case BTFErrorInformation::Code::InvalidVolatileBTFTypeEncoding:
-      buffer << "Invalid encoding of `Volatile` BTFType";
+      buffer << "Invalid encoding for `Volatile` BTFType";
       break;
     }
 
@@ -178,9 +178,38 @@ struct VolatileBTFType final {
   std::uint32_t type{};
 };
 
-using BTFType = std::variant<std::monostate, IntBTFType, PtrBTFType,
-                             ConstBTFType, ArrayBTFType, TypedefBTFType,
-                             EnumBTFType, FuncProtoBTFType, VolatileBTFType>;
+struct StructBPFType final {
+  struct Member final {
+    std::optional<std::string> opt_name;
+    std::uint32_t type{};
+    std::uint32_t offset{};
+  };
+
+  using MemberList = std::vector<Member>;
+
+  std::optional<std::string> opt_name;
+  std::uint32_t size{};
+  MemberList member_list;
+};
+
+struct UnionBPFType final {
+  struct Member final {
+    std::optional<std::string> opt_name;
+    std::uint32_t type{};
+    std::uint32_t offset{};
+  };
+
+  using MemberList = std::vector<Member>;
+
+  std::optional<std::string> opt_name;
+  std::uint32_t size{};
+  MemberList member_list;
+};
+
+using BTFType =
+    std::variant<std::monostate, IntBTFType, PtrBTFType, ConstBTFType,
+                 ArrayBTFType, TypedefBTFType, EnumBTFType, FuncProtoBTFType,
+                 VolatileBTFType, StructBPFType, UnionBPFType>;
 
 class IBTF {
 public:
