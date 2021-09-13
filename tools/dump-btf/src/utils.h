@@ -13,4 +13,4 @@
 #include <iostream>
 
 std::ostream &operator<<(std::ostream &stream, btfparse::BTFKind kind);
-std::string printType(btfparse::IBTF &btf, const btfparse::BTFType &type);
+std::ostream &operator<<(std::ostream &stream, const btfparse::BTFType &type);

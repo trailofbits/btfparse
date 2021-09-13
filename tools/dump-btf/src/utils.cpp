@@ -38,6 +38,16 @@ void printStructOrUnionBTFType(std::ostream &stream, const Type &type) {
            << "type_id=" << member.type << " "
            << "bits_offset=" << member.offset;
 
+    if (member.opt_bitfield_size.has_value()) {
+      auto bitfield_size =
+          static_cast<std::uint32_t>(member.opt_bitfield_size.value());
+
+      if (bitfield_size != 0) {
+        stream << " "
+               << "bitfield_size=" << bitfield_size;
+      }
+    }
+
     if (std::next(it, 1) != type.member_list.end()) {
       stream << "\n";
     }
@@ -131,9 +141,11 @@ std::ostream &operator<<(std::ostream &stream,
   for (auto it = type.value_list.begin(); it != type.value_list.end(); ++it) {
     const auto &value = *it;
 
+    // Even though `val` is marked as signed in the "BTF Type Format"
+    // documentation, the `bpftool` prints it as unsigned
     stream << "\t"
            << "'" << value.name << "' "
-           << "val=" << value.val;
+           << "val=" << static_cast<std::uint32_t>(value.val);
 
     if (std::next(it, 1) != type.value_list.end()) {
       stream << "\n";
@@ -143,11 +155,22 @@ std::ostream &operator<<(std::ostream &stream,
   return stream;
 }
 
+// When the last item in the BTF format is unnamed and has type 0, then it's
+// a variadic function. This library removes the last item and enables the
+// `is_variadic` flag in the object.
+//
+// Retain this behavior when outputting data in bptftool format
 std::ostream &operator<<(std::ostream &stream,
                          const btfparse::FuncProtoBTFType &type) {
+
+  auto vlen = type.param_list.size();
+  if (type.is_variadic) {
+    ++vlen;
+  }
+
   stream << "'(anon)' "
          << "ret_type_id=" << type.return_type << " "
-         << "vlen=" << type.param_list.size();
+         << "vlen=" << vlen;
 
   if (!type.param_list.empty()) {
     stream << "\n";
@@ -167,17 +190,12 @@ std::ostream &operator<<(std::ostream &stream,
     }
   }
 
-  // When the last item in the BTF format is unnamed and has type 0, then it's
-  // a variadic function. This library removes the last item and enables the
-  // flag in the object.
-  //
-  // Retain this behavior when outputting data in bptftool format
-  if (type.variadic) {
+  if (type.is_variadic) {
     if (!type.param_list.empty()) {
       stream << "\n";
     }
 
-    stream << "  '(anon)' type_id=0";
+    stream << "\t'(anon)' type_id=0";
   }
 
   return stream;
@@ -261,15 +279,32 @@ std::ostream &operator<<(std::ostream &stream,
   return stream;
 }
 
-std::string printFuncBTFType(btfparse::IBTF &btf,
-                             const btfparse::FuncBTFType &type) {
-  std::stringstream stream;
+std::ostream &operator<<(std::ostream &stream,
+                         const btfparse::FuncBTFType::Linkage &linkage) {
+  switch (linkage) {
+  case btfparse::FuncBTFType::Linkage::Static:
+    stream << "static";
+    break;
 
+  case btfparse::FuncBTFType::Linkage::Global:
+    stream << "global";
+    break;
+
+  case btfparse::FuncBTFType::Linkage::Extern:
+    stream << "extern";
+    break;
+  }
+
+  return stream;
+}
+
+std::ostream &operator<<(std::ostream &stream,
+                         const btfparse::FuncBTFType &type) {
   stream << "'" << type.name << "' "
          << "type_id=" << type.type << " "
-         << "linkage=static";
+         << "linkage=" << type.linkage;
 
-  return stream.str();
+  return stream;
 }
 
 } // namespace
@@ -352,9 +387,7 @@ std::ostream &operator<<(std::ostream &stream, btfparse::BTFKind kind) {
   return stream;
 }
 
-std::string printType(btfparse::IBTF &btf, const btfparse::BTFType &type) {
-  std::stringstream stream;
-
+std::ostream &operator<<(std::ostream &stream, const btfparse::BTFType &type) {
   switch (btfparse::IBTF::getBTFTypeKind(type)) {
   case btfparse::BTFKind::Void:
     break;
@@ -404,7 +437,7 @@ std::string printType(btfparse::IBTF &btf, const btfparse::BTFType &type) {
     break;
 
   case btfparse::BTFKind::Func:
-    stream << printFuncBTFType(btf, std::get<btfparse::FuncBTFType>(type));
+    stream << std::get<btfparse::FuncBTFType>(type);
     break;
 
   case btfparse::BTFKind::FuncProto:
@@ -428,5 +461,5 @@ std::string printType(btfparse::IBTF &btf, const btfparse::BTFType &type) {
     break;
   }
 
-  return stream.str();
+  return stream;
 }

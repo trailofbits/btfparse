@@ -12,6 +12,7 @@
 #include <btfparse/result.h>
 
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -213,7 +214,7 @@ struct FuncProtoBTFType final {
 
   std::uint32_t return_type{};
   ParamList param_list;
-  bool variadic{false};
+  bool is_variadic{false};
 };
 
 struct VolatileBTFType final {
@@ -225,6 +226,7 @@ struct StructBTFType final {
     std::optional<std::string> opt_name;
     std::uint32_t type{};
     std::uint32_t offset{};
+    std::optional<std::uint8_t> opt_bitfield_size;
   };
 
   using MemberList = std::vector<Member>;
@@ -239,6 +241,7 @@ struct UnionBTFType final {
     std::optional<std::string> opt_name;
     std::uint32_t type{};
     std::uint32_t offset{};
+    std::optional<std::uint8_t> opt_bitfield_size;
   };
 
   using MemberList = std::vector<Member>;
@@ -254,8 +257,15 @@ struct FwdBTFType final {
 };
 
 struct FuncBTFType final {
+  enum class Linkage {
+    Static = 0,
+    Global = 1,
+    Extern = 2,
+  };
+
   std::string name;
   std::uint32_t type{};
+  Linkage linkage{Linkage::Static};
 };
 
 struct FloatBTFType final {
@@ -314,7 +324,7 @@ using BTFType =
                  FuncBTFType, FuncProtoBTFType, VarBTFType, DataSecBTFType,
                  FloatBTFType>;
 
-using BTFTypeList = std::vector<BTFType>;
+using BTFTypeMap = std::map<std::uint32_t, BTFType>;
 
 class IBTF {
 public:
@@ -327,7 +337,7 @@ public:
   virtual std::optional<BTFKind> getKind(std::uint32_t id) const noexcept = 0;
 
   virtual std::uint32_t count() const noexcept = 0;
-  virtual BTFTypeList getAll() const noexcept = 0;
+  virtual BTFTypeMap getAll() const noexcept = 0;
 
   static BTFKind getBTFTypeKind(const BTFType &btf_type) noexcept;
 

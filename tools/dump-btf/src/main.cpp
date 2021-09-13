@@ -40,11 +40,12 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  for (std::uint32_t id = 0; id < btf->count(); ++id) {
-    auto type = btf->getType(id).value();
+  for (const auto &btf_type_map_p : btf->getAll()) {
+    const auto &id = btf_type_map_p.first;
+    const auto &btf_type = btf_type_map_p.second;
 
-    std::cout << "[" << id << "] " << btfparse::IBTF::getBTFTypeKind(type)
-              << " " << printType(*btf.get(), type) << "\n";
+    std::cout << "[" << id << "] " << btfparse::IBTF::getBTFTypeKind(btf_type)
+              << " " << btf_type << "\n";
   }
 
   return 0;

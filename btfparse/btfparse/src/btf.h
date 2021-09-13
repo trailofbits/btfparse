@@ -32,7 +32,7 @@ public:
   getKind(std::uint32_t id) const noexcept override;
 
   virtual std::uint32_t count() const noexcept override;
-  virtual BTFTypeList getAll() const noexcept override;
+  virtual BTFTypeMap getAll() const noexcept override;
 
 private:
   struct PrivateData;
@@ -49,7 +49,7 @@ public:
   static Result<BTFHeader, BTFError>
   readBTFHeader(IFileReader &file_reader) noexcept;
 
-  static Result<BTFTypeList, BTFError>
+  static Result<BTFTypeMap, BTFError>
   parseTypeSection(const BTFHeader &btf_header,
                    IFileReader &file_reader) noexcept;
 

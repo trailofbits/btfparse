@@ -77,7 +77,15 @@ parseStructOrUnionData(Type &output, const BTFHeader &btf_header,
       }
 
       member.type = file_reader.u32();
-      member.offset = file_reader.u32();
+
+      auto offset = file_reader.u32();
+      if (btf_type_header.kind_flag) {
+        member.offset = offset & 0xFFFFFFUL;
+        member.opt_bitfield_size = static_cast<std::uint8_t>(offset >> 24);
+
+      } else {
+        member.offset = offset;
+      }
 
       output.member_list.push_back(std::move(member));
     }
@@ -92,33 +100,35 @@ parseStructOrUnionData(Type &output, const BTFHeader &btf_header,
 } // namespace
 
 struct BTF::PrivateData final {
-  BTFTypeList btf_type_list;
+  BTFTypeMap btf_type_map;
 };
 
 BTF::~BTF() {}
 
 std::optional<BTFType> BTF::getType(std::uint32_t id) const noexcept {
-  if (id >= d->btf_type_list.size()) {
+  auto btf_type_map_it = d->btf_type_map.find(id);
+  if (btf_type_map_it == d->btf_type_map.end()) {
     return std::nullopt;
   }
 
-  return d->btf_type_list.at(id);
+  return btf_type_map_it->second;
 }
 
 std::optional<BTFKind> BTF::getKind(std::uint32_t id) const noexcept {
-  if (id >= d->btf_type_list.size()) {
+  auto btf_type_map_it = d->btf_type_map.find(id);
+  if (btf_type_map_it == d->btf_type_map.end()) {
     return std::nullopt;
   }
 
-  const auto &btf_type = d->btf_type_list.at(id);
+  const auto &btf_type = btf_type_map_it->second;
   return getBTFTypeKind(btf_type);
 }
 
 std::uint32_t BTF::count() const noexcept {
-  return static_cast<std::uint32_t>(d->btf_type_list.size());
+  return static_cast<std::uint32_t>(d->btf_type_map.size());
 }
 
-BTFTypeList BTF::getAll() const noexcept { return d->btf_type_list; }
+BTFTypeMap BTF::getAll() const noexcept { return d->btf_type_map; }
 
 BTF::BTF(const std::filesystem::path &path) : d(new PrivateData) {
   auto file_reader_res = IFileReader::open(path);
@@ -143,12 +153,12 @@ BTF::BTF(const std::filesystem::path &path) : d(new PrivateData) {
 
   auto btf_header = btf_header_res.takeValue();
 
-  auto btf_type_list_res = parseTypeSection(btf_header, *file_reader.get());
-  if (btf_type_list_res.failed()) {
-    throw btf_type_list_res.takeError();
+  auto btf_type_map_res = parseTypeSection(btf_header, *file_reader.get());
+  if (btf_type_map_res.failed()) {
+    throw btf_type_map_res.takeError();
   }
 
-  d->btf_type_list = btf_type_list_res.takeValue();
+  d->btf_type_map = btf_type_map_res.takeValue();
 }
 
 BTFError BTF::convertFileReaderError(const FileReaderError &error) noexcept {
@@ -242,20 +252,21 @@ BTF::readBTFHeader(IFileReader &file_reader) noexcept {
   }
 }
 
-Result<BTFTypeList, BTFError>
+Result<BTFTypeMap, BTFError>
 BTF::parseTypeSection(const BTFHeader &btf_header,
                       IFileReader &file_reader) noexcept {
 
   try {
-    // Type 0 is always reserved for Void
-    BTFTypeList btf_type_list;
-    btf_type_list.push_back(BTFType{std::monostate()});
+    BTFTypeMap btf_type_map;
 
     auto type_section_start_offset = btf_header.hdr_len + btf_header.type_off;
     auto type_section_end_offset =
         type_section_start_offset + btf_header.type_len;
 
     file_reader.seek(type_section_start_offset);
+
+    // Type id #0 is reserved for VOID
+    std::uint32_t type_id{1U};
 
     for (;;) {
       auto current_offset = file_reader.offset();
@@ -297,10 +308,11 @@ BTF::parseTypeSection(const BTFHeader &btf_header,
         return btf_type_res.takeError();
       }
 
-      btf_type_list.push_back(btf_type_res.takeValue());
+      btf_type_map.insert({type_id, btf_type_res.takeValue()});
+      ++type_id;
     }
 
-    return btf_type_list;
+    return btf_type_map;
 
   } catch (const FileReaderError &error) {
     return convertFileReaderError(error);
@@ -684,7 +696,7 @@ BTF::parseFuncProtoData(const BTFHeader &btf_header,
 
       if (!last_element.opt_name.has_value() && last_element.type == 0) {
         output.param_list.pop_back();
-        output.variadic = true;
+        output.is_variadic = true;
       }
     }
 
@@ -795,7 +807,7 @@ BTF::parseFuncData(const BTFHeader &btf_header,
       file_reader.offset() - kBTFTypeHeaderSize, kBTFTypeHeaderSize};
 
   if (btf_type_header.name_off == 0 || btf_type_header.kind_flag ||
-      btf_type_header.vlen != 0) {
+      btf_type_header.vlen >= 3) {
 
     return BTFError{
         BTFErrorInformation{
@@ -816,6 +828,7 @@ BTF::parseFuncData(const BTFHeader &btf_header,
   FuncBTFType output;
   output.name = name_res.takeValue();
   output.type = btf_type_header.size_or_type;
+  output.linkage = static_cast<FuncBTFType::Linkage>(btf_type_header.vlen);
 
   return BTFType{output};
 }
