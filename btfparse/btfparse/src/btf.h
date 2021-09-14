@@ -17,7 +17,14 @@
 
 namespace btfparse {
 
-using BTFTypeParser = Result<BTFType, BTFError> (*)(const BTFHeader &,
+struct BTFFile final {
+  BTFHeader btf_header;
+  IFileReader::Ptr file_reader;
+};
+
+using BTFFileList = std::vector<BTFFile>;
+
+using BTFTypeParser = Result<BTFType, BTFError> (*)(const BTFFileList &,
                                                     const BTFTypeHeader &,
                                                     IFileReader &);
 
@@ -38,7 +45,7 @@ private:
   struct PrivateData;
   std::unique_ptr<PrivateData> d;
 
-  BTF(const std::filesystem::path &path);
+  BTF(const PathList &path_list);
 
 public:
   static BTFError convertFileReaderError(const FileReaderError &error) noexcept;
@@ -50,91 +57,88 @@ public:
   readBTFHeader(IFileReader &file_reader) noexcept;
 
   static Result<BTFTypeMap, BTFError>
-  parseTypeSection(const BTFHeader &btf_header,
-                   IFileReader &file_reader) noexcept;
+  parseTypeSections(const BTFFileList &btf_file_list) noexcept;
 
   static Result<BTFTypeHeader, BTFError>
   parseTypeHeader(IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseIntData(const BTFHeader &btf_header,
+  parseIntData(const BTFFileList &btf_file_list,
                const BTFTypeHeader &btf_type_header,
                IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parsePtrData(const BTFHeader &btf_header,
-               const BTFTypeHeader &btf_type_header,
+  parsePtrData(const BTFFileList &, const BTFTypeHeader &btf_type_header,
                IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseConstData(const BTFHeader &btf_header,
-                 const BTFTypeHeader &btf_type_header,
+  parseConstData(const BTFFileList &, const BTFTypeHeader &btf_type_header,
                  IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseArrayData(const BTFHeader &btf_header,
-                 const BTFTypeHeader &btf_type_header,
+  parseArrayData(const BTFFileList &, const BTFTypeHeader &btf_type_header,
                  IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseTypedefData(const BTFHeader &btf_header,
+  parseTypedefData(const BTFFileList &btf_file_list,
                    const BTFTypeHeader &btf_type_header,
                    IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseEnumData(const BTFHeader &btf_header,
+  parseEnumData(const BTFFileList &btf_file_list,
                 const BTFTypeHeader &btf_type_header,
                 IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseFuncProtoData(const BTFHeader &btf_header,
+  parseFuncProtoData(const BTFFileList &btf_file_list,
                      const BTFTypeHeader &btf_type_header,
                      IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseVolatileData(const BTFHeader &btf_header,
-                    const BTFTypeHeader &btf_type_header,
+  parseVolatileData(const BTFFileList &, const BTFTypeHeader &btf_type_header,
                     IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseStructData(const BTFHeader &btf_header,
+  parseStructData(const BTFFileList &btf_file_list,
                   const BTFTypeHeader &btf_type_header,
                   IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseUnionData(const BTFHeader &btf_header,
+  parseUnionData(const BTFFileList &btf_file_list,
                  const BTFTypeHeader &btf_type_header,
                  IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseFwdData(const BTFHeader &btf_header,
+  parseFwdData(const BTFFileList &btf_file_list,
                const BTFTypeHeader &btf_type_header,
                IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseFuncData(const BTFHeader &btf_header,
+  parseFuncData(const BTFFileList &btf_file_list,
                 const BTFTypeHeader &btf_type_header,
                 IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseFloatData(const BTFHeader &btf_header,
+  parseFloatData(const BTFFileList &btf_file_list,
                  const BTFTypeHeader &btf_type_header,
                  IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseRestrictData(const BTFHeader &btf_header,
-                    const BTFTypeHeader &btf_type_header,
+  parseRestrictData(const BTFFileList &, const BTFTypeHeader &btf_type_header,
                     IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseVarData(const BTFHeader &btf_header,
+  parseVarData(const BTFFileList &btf_file_list,
                const BTFTypeHeader &btf_type_header,
                IFileReader &file_reader) noexcept;
 
   static Result<BTFType, BTFError>
-  parseDataSecData(const BTFHeader &btf_header,
+  parseDataSecData(const BTFFileList &btf_file_list,
                    const BTFTypeHeader &btf_type_header,
                    IFileReader &file_reader) noexcept;
+
+  static Result<std::string, BTFError>
+  parseString(const BTFFileList &btf_file_list, std::uint64_t offset) noexcept;
 
   static Result<std::string, BTFError>
   parseString(IFileReader &file_reader, std::uint64_t offset) noexcept;

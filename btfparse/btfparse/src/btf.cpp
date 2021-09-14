@@ -32,11 +32,9 @@ const std::unordered_map<BTFKind, BTFTypeParser> kBTFParserMap{
     {BTFKind::Var, BTF::parseVarData},
     {BTFKind::DataSec, BTF::parseDataSecData}};
 
-/// TODO: Check again how this is encoded; the `kind_flag` value changes how
-/// `offset` works
 template <typename Type>
 std::optional<BTFError>
-parseStructOrUnionData(Type &output, const BTFHeader &btf_header,
+parseStructOrUnionData(Type &output, const BTFFileList &btf_file_list,
                        const BTFTypeHeader &btf_type_header,
                        IFileReader &file_reader) noexcept {
 
@@ -50,10 +48,7 @@ parseStructOrUnionData(Type &output, const BTFHeader &btf_header,
     output.size = btf_type_header.size_or_type;
 
     if (btf_type_header.name_off != 0) {
-      auto name_offset =
-          btf_type_header.name_off + btf_header.hdr_len + btf_header.str_off;
-
-      auto name_res = BTF::parseString(file_reader, name_offset);
+      auto name_res = BTF::parseString(btf_file_list, btf_type_header.name_off);
       if (name_res.failed()) {
         return name_res.takeError();
       }
@@ -66,9 +61,7 @@ parseStructOrUnionData(Type &output, const BTFHeader &btf_header,
 
       auto member_name_off = file_reader.u32();
       if (member_name_off != 0) {
-        member_name_off += btf_header.hdr_len + btf_header.str_off;
-
-        auto member_name_res = BTF::parseString(file_reader, member_name_off);
+        auto member_name_res = BTF::parseString(btf_file_list, member_name_off);
         if (member_name_res.failed()) {
           return member_name_res.takeError();
         }
@@ -130,30 +123,38 @@ std::uint32_t BTF::count() const noexcept {
 
 BTFTypeMap BTF::getAll() const noexcept { return d->btf_type_map; }
 
-BTF::BTF(const std::filesystem::path &path) : d(new PrivateData) {
-  auto file_reader_res = IFileReader::open(path);
-  if (file_reader_res.failed()) {
-    throw convertFileReaderError(file_reader_res.takeError());
+BTF::BTF(const PathList &path_list) : d(new PrivateData) {
+  BTFFileList btf_file_list;
+
+  for (const auto &path : path_list) {
+    auto file_reader_res = IFileReader::open(path);
+    if (file_reader_res.failed()) {
+      throw convertFileReaderError(file_reader_res.takeError());
+    }
+
+    BTFFile btf_file;
+    btf_file.file_reader = file_reader_res.takeValue();
+
+    auto &file_reader = *btf_file.file_reader.get();
+
+    bool little_endian{false};
+    auto opt_error = detectEndianness(little_endian, file_reader);
+    if (opt_error.has_value()) {
+      throw opt_error.value();
+    }
+
+    file_reader.setEndianness(little_endian);
+
+    auto btf_header_res = readBTFHeader(file_reader);
+    if (btf_header_res.failed()) {
+      throw btf_header_res.takeError();
+    }
+
+    btf_file.btf_header = btf_header_res.takeValue();
+    btf_file_list.push_back(std::move(btf_file));
   }
 
-  auto file_reader = file_reader_res.takeValue();
-
-  bool little_endian{false};
-  auto opt_error = detectEndianness(little_endian, *file_reader.get());
-  if (opt_error.has_value()) {
-    throw opt_error.value();
-  }
-
-  file_reader->setEndianness(little_endian);
-
-  auto btf_header_res = readBTFHeader(*file_reader.get());
-  if (btf_header_res.failed()) {
-    throw btf_header_res.takeError();
-  }
-
-  auto btf_header = btf_header_res.takeValue();
-
-  auto btf_type_map_res = parseTypeSection(btf_header, *file_reader.get());
+  auto btf_type_map_res = parseTypeSections(btf_file_list);
   if (btf_type_map_res.failed()) {
     throw btf_type_map_res.takeError();
   }
@@ -253,63 +254,65 @@ BTF::readBTFHeader(IFileReader &file_reader) noexcept {
 }
 
 Result<BTFTypeMap, BTFError>
-BTF::parseTypeSection(const BTFHeader &btf_header,
-                      IFileReader &file_reader) noexcept {
+BTF::parseTypeSections(const BTFFileList &btf_file_list) noexcept {
+  BTFTypeMap btf_type_map;
+
+  std::uint32_t type_id{1U};
 
   try {
-    BTFTypeMap btf_type_map;
+    for (auto &btf_file : btf_file_list) {
+      const auto &btf_header = btf_file.btf_header;
+      auto &file_reader = *btf_file.file_reader.get();
 
-    auto type_section_start_offset = btf_header.hdr_len + btf_header.type_off;
-    auto type_section_end_offset =
-        type_section_start_offset + btf_header.type_len;
+      auto type_section_start_offset = btf_header.hdr_len + btf_header.type_off;
+      auto type_section_end_offset =
+          type_section_start_offset + btf_header.type_len;
 
-    file_reader.seek(type_section_start_offset);
+      file_reader.seek(type_section_start_offset);
 
-    // Type id #0 is reserved for VOID
-    std::uint32_t type_id{1U};
+      for (;;) {
+        auto current_offset = file_reader.offset();
+        if (current_offset >= type_section_end_offset) {
+          break;
+        }
 
-    for (;;) {
-      auto current_offset = file_reader.offset();
-      if (current_offset >= type_section_end_offset) {
-        break;
+        auto btf_type_header_res = parseTypeHeader(file_reader);
+        if (btf_type_header_res.failed()) {
+          return btf_type_header_res.takeError();
+        }
+
+        auto btf_type_header = btf_type_header_res.takeValue();
+
+        BTFErrorInformation::FileRange file_range{current_offset,
+                                                  kBTFTypeHeaderSize};
+
+        if (btf_type_header.kind > static_cast<std::uint8_t>(BTFKind::Float)) {
+          return BTFError{
+              BTFErrorInformation{BTFErrorInformation::Code::InvalidBTFKind,
+                                  file_range},
+          };
+        }
+
+        auto btf_kind = static_cast<BTFKind>(btf_type_header.kind);
+
+        auto parser_it = kBTFParserMap.find(btf_kind);
+        if (parser_it == kBTFParserMap.end()) {
+          return BTFError{
+              BTFErrorInformation{BTFErrorInformation::Code::UnsupportedBTFKind,
+                                  file_range},
+          };
+        }
+
+        const auto &parser = parser_it->second;
+
+        auto btf_type_res = parser(btf_file_list, btf_type_header, file_reader);
+        if (btf_type_res.failed()) {
+          return btf_type_res.takeError();
+        }
+
+        btf_type_map.insert({type_id, btf_type_res.takeValue()});
+        ++type_id;
       }
-
-      auto btf_type_header_res = parseTypeHeader(file_reader);
-      if (btf_type_header_res.failed()) {
-        return btf_type_header_res.takeError();
-      }
-
-      auto btf_type_header = btf_type_header_res.takeValue();
-
-      BTFErrorInformation::FileRange file_range{current_offset,
-                                                kBTFTypeHeaderSize};
-
-      if (btf_type_header.kind > static_cast<std::uint8_t>(BTFKind::Float)) {
-        return BTFError{
-            BTFErrorInformation{BTFErrorInformation::Code::InvalidBTFKind,
-                                file_range},
-        };
-      }
-
-      auto btf_kind = static_cast<BTFKind>(btf_type_header.kind);
-
-      auto parser_it = kBTFParserMap.find(btf_kind);
-      if (parser_it == kBTFParserMap.end()) {
-        return BTFError{
-            BTFErrorInformation{BTFErrorInformation::Code::UnsupportedBTFKind,
-                                file_range},
-        };
-      }
-
-      const auto &parser = parser_it->second;
-
-      auto btf_type_res = parser(btf_header, btf_type_header, file_reader);
-      if (btf_type_res.failed()) {
-        return btf_type_res.takeError();
-      }
-
-      btf_type_map.insert({type_id, btf_type_res.takeValue()});
-      ++type_id;
     }
 
     return btf_type_map;
@@ -341,7 +344,7 @@ BTF::parseTypeHeader(IFileReader &file_reader) noexcept {
 }
 
 Result<BTFType, BTFError>
-BTF::parseIntData(const BTFHeader &btf_header,
+BTF::parseIntData(const BTFFileList &btf_file_list,
                   const BTFTypeHeader &btf_type_header,
                   IFileReader &file_reader) noexcept {
 
@@ -377,10 +380,7 @@ BTF::parseIntData(const BTFHeader &btf_header,
   }
 
   try {
-    auto name_offset =
-        btf_header.hdr_len + btf_header.str_off + btf_type_header.name_off;
-
-    auto name_res = parseString(file_reader, name_offset);
+    auto name_res = parseString(btf_file_list, btf_type_header.name_off);
     if (name_res.failed()) {
       return name_res.takeError();
     }
@@ -449,8 +449,7 @@ BTF::parseIntData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parsePtrData(const BTFHeader &btf_header,
-                  const BTFTypeHeader &btf_type_header,
+BTF::parsePtrData(const BTFFileList &, const BTFTypeHeader &btf_type_header,
                   IFileReader &file_reader) noexcept {
 
   BTFErrorInformation::FileRange file_range{
@@ -474,8 +473,7 @@ BTF::parsePtrData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseConstData(const BTFHeader &btf_header,
-                    const BTFTypeHeader &btf_type_header,
+BTF::parseConstData(const BTFFileList &, const BTFTypeHeader &btf_type_header,
                     IFileReader &file_reader) noexcept {
 
   BTFErrorInformation::FileRange file_range{
@@ -499,8 +497,7 @@ BTF::parseConstData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseArrayData(const BTFHeader &btf_header,
-                    const BTFTypeHeader &btf_type_header,
+BTF::parseArrayData(const BTFFileList &, const BTFTypeHeader &btf_type_header,
                     IFileReader &file_reader) noexcept {
 
   BTFErrorInformation::FileRange file_range{
@@ -532,7 +529,7 @@ BTF::parseArrayData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseTypedefData(const BTFHeader &btf_header,
+BTF::parseTypedefData(const BTFFileList &btf_file_list,
                       const BTFTypeHeader &btf_type_header,
                       IFileReader &file_reader) noexcept {
 
@@ -550,10 +547,7 @@ BTF::parseTypedefData(const BTFHeader &btf_header,
     };
   }
 
-  auto name_offset =
-      btf_header.hdr_len + btf_header.str_off + btf_type_header.name_off;
-
-  auto name_res = parseString(file_reader, name_offset);
+  auto name_res = parseString(btf_file_list, btf_type_header.name_off);
   if (name_res.failed()) {
     return name_res.takeError();
   }
@@ -566,7 +560,7 @@ BTF::parseTypedefData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseEnumData(const BTFHeader &btf_header,
+BTF::parseEnumData(const BTFFileList &btf_file_list,
                    const BTFTypeHeader &btf_type_header,
                    IFileReader &file_reader) noexcept {
 
@@ -604,10 +598,7 @@ BTF::parseEnumData(const BTFHeader &btf_header,
     output.size = btf_type_header.size_or_type;
 
     if (btf_type_header.name_off != 0) {
-      auto name_offset =
-          btf_header.hdr_len + btf_header.str_off + btf_type_header.name_off;
-
-      auto name_res = parseString(file_reader, name_offset);
+      auto name_res = parseString(btf_file_list, btf_type_header.name_off);
       if (name_res.failed()) {
         return name_res.takeError();
       }
@@ -626,10 +617,7 @@ BTF::parseEnumData(const BTFHeader &btf_header,
         };
       }
 
-      auto value_name_res =
-          parseString(file_reader,
-                      btf_header.hdr_len + btf_header.str_off + value_name_off);
-
+      auto value_name_res = parseString(btf_file_list, value_name_off);
       if (value_name_res.failed()) {
         return value_name_res.takeError();
       }
@@ -648,10 +636,8 @@ BTF::parseEnumData(const BTFHeader &btf_header,
   }
 }
 
-// TODO: Check the documentation for `BTF_KIND_FUNC_PROTO` for the necessary
-// post-parsing validation steps
 Result<BTFType, BTFError>
-BTF::parseFuncProtoData(const BTFHeader &btf_header,
+BTF::parseFuncProtoData(const BTFFileList &btf_file_list,
                         const BTFTypeHeader &btf_type_header,
                         IFileReader &file_reader) noexcept {
 
@@ -676,9 +662,7 @@ BTF::parseFuncProtoData(const BTFHeader &btf_header,
 
       auto param_name_off = file_reader.u32();
       if (param_name_off != 0) {
-        param_name_off += btf_header.hdr_len + btf_header.str_off;
-
-        auto param_name_res = parseString(file_reader, param_name_off);
+        auto param_name_res = parseString(btf_file_list, param_name_off);
         if (param_name_res.failed()) {
           return param_name_res.takeError();
         }
@@ -708,7 +692,7 @@ BTF::parseFuncProtoData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseVolatileData(const BTFHeader &btf_header,
+BTF::parseVolatileData(const BTFFileList &,
                        const BTFTypeHeader &btf_type_header,
                        IFileReader &file_reader) noexcept {
 
@@ -733,13 +717,13 @@ BTF::parseVolatileData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseStructData(const BTFHeader &btf_header,
+BTF::parseStructData(const BTFFileList &btf_file_list,
                      const BTFTypeHeader &btf_type_header,
                      IFileReader &file_reader) noexcept {
 
   StructBTFType output;
-  auto opt_error =
-      parseStructOrUnionData(output, btf_header, btf_type_header, file_reader);
+  auto opt_error = parseStructOrUnionData(output, btf_file_list,
+                                          btf_type_header, file_reader);
 
   if (opt_error.has_value()) {
     return opt_error.value();
@@ -749,13 +733,13 @@ BTF::parseStructData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseUnionData(const BTFHeader &btf_header,
+BTF::parseUnionData(const BTFFileList &btf_file_list,
                     const BTFTypeHeader &btf_type_header,
                     IFileReader &file_reader) noexcept {
 
   UnionBTFType output;
-  auto opt_error =
-      parseStructOrUnionData(output, btf_header, btf_type_header, file_reader);
+  auto opt_error = parseStructOrUnionData(output, btf_file_list,
+                                          btf_type_header, file_reader);
 
   if (opt_error.has_value()) {
     return opt_error.value();
@@ -765,7 +749,7 @@ BTF::parseUnionData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseFwdData(const BTFHeader &btf_header,
+BTF::parseFwdData(const BTFFileList &btf_file_list,
                   const BTFTypeHeader &btf_type_header,
                   IFileReader &file_reader) noexcept {
 
@@ -783,10 +767,7 @@ BTF::parseFwdData(const BTFHeader &btf_header,
     };
   }
 
-  auto name_offset =
-      btf_type_header.name_off + btf_header.hdr_len + btf_header.str_off;
-
-  auto name_res = parseString(file_reader, name_offset);
+  auto name_res = parseString(btf_file_list, btf_type_header.name_off);
   if (name_res.failed()) {
     return name_res.takeError();
   }
@@ -799,7 +780,7 @@ BTF::parseFwdData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseFuncData(const BTFHeader &btf_header,
+BTF::parseFuncData(const BTFFileList &btf_file_list,
                    const BTFTypeHeader &btf_type_header,
                    IFileReader &file_reader) noexcept {
 
@@ -817,10 +798,7 @@ BTF::parseFuncData(const BTFHeader &btf_header,
     };
   }
 
-  auto name_offset =
-      btf_type_header.name_off + btf_header.hdr_len + btf_header.str_off;
-
-  auto name_res = parseString(file_reader, name_offset);
+  auto name_res = parseString(btf_file_list, btf_type_header.name_off);
   if (name_res.failed()) {
     return name_res.takeError();
   }
@@ -834,7 +812,7 @@ BTF::parseFuncData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseFloatData(const BTFHeader &btf_header,
+BTF::parseFloatData(const BTFFileList &btf_file_list,
                     const BTFTypeHeader &btf_type_header,
                     IFileReader &file_reader) noexcept {
 
@@ -869,10 +847,7 @@ BTF::parseFloatData(const BTFHeader &btf_header,
     };
   }
 
-  auto name_offset =
-      btf_type_header.name_off + btf_header.hdr_len + btf_header.str_off;
-
-  auto name_res = parseString(file_reader, name_offset);
+  auto name_res = parseString(btf_file_list, btf_type_header.name_off);
   if (name_res.failed()) {
     return name_res.takeError();
   }
@@ -885,7 +860,7 @@ BTF::parseFloatData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseRestrictData(const BTFHeader &btf_header,
+BTF::parseRestrictData(const BTFFileList &,
                        const BTFTypeHeader &btf_type_header,
                        IFileReader &file_reader) noexcept {
 
@@ -910,7 +885,7 @@ BTF::parseRestrictData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseVarData(const BTFHeader &btf_header,
+BTF::parseVarData(const BTFFileList &btf_file_list,
                   const BTFTypeHeader &btf_type_header,
                   IFileReader &file_reader) noexcept {
 
@@ -918,7 +893,7 @@ BTF::parseVarData(const BTFHeader &btf_header,
                                                 kBTFTypeHeaderSize,
                                             kBTFTypeHeaderSize + kVarDataSize};
 
-  if (btf_type_header.name_off != 0 || btf_type_header.kind_flag ||
+  if (btf_type_header.name_off == 0 || btf_type_header.kind_flag ||
       btf_type_header.vlen != 0) {
 
     return BTFError{
@@ -929,10 +904,7 @@ BTF::parseVarData(const BTFHeader &btf_header,
     };
   }
 
-  auto name_offset =
-      btf_type_header.name_off + btf_header.hdr_len + btf_header.str_off;
-
-  auto name_res = BTF::parseString(file_reader, name_offset);
+  auto name_res = parseString(btf_file_list, btf_type_header.name_off);
   if (name_res.failed()) {
     return name_res.takeError();
   }
@@ -952,7 +924,7 @@ BTF::parseVarData(const BTFHeader &btf_header,
 }
 
 Result<BTFType, BTFError>
-BTF::parseDataSecData(const BTFHeader &btf_header,
+BTF::parseDataSecData(const BTFFileList &btf_file_list,
                       const BTFTypeHeader &btf_type_header,
                       IFileReader &file_reader) noexcept {
 
@@ -969,10 +941,7 @@ BTF::parseDataSecData(const BTFHeader &btf_header,
     };
   }
 
-  auto name_offset =
-      btf_type_header.name_off + btf_header.hdr_len + btf_header.str_off;
-
-  auto name_res = BTF::parseString(file_reader, name_offset);
+  auto name_res = parseString(btf_file_list, btf_type_header.name_off);
   if (name_res.failed()) {
     return name_res.takeError();
   }
@@ -998,6 +967,34 @@ BTF::parseDataSecData(const BTFHeader &btf_header,
   }
 }
 
+Result<std::string, BTFError> BTF::parseString(const BTFFileList &btf_file_list,
+                                               std::uint64_t offset) noexcept {
+  std::uint32_t start_offset{};
+
+  for (const auto &btf_file : btf_file_list) {
+    auto end_offset = start_offset + btf_file.btf_header.str_len;
+    auto relative_offset = offset - start_offset;
+
+    if (relative_offset < end_offset) {
+      auto &file_reader = *btf_file.file_reader.get();
+
+      auto absolute_offset = btf_file.btf_header.hdr_len +
+                             btf_file.btf_header.str_off + relative_offset;
+
+      return parseString(file_reader, absolute_offset);
+    }
+
+    start_offset = end_offset;
+  }
+
+  return BTFError{
+      BTFErrorInformation{
+          BTFErrorInformation::Code::InvalidStringOffset,
+          btfparse::BTFErrorInformation::FileRange{offset, 0},
+      },
+  };
+}
+
 Result<std::string, BTFError> BTF::parseString(IFileReader &file_reader,
                                                std::uint64_t offset) noexcept {
 
@@ -1021,10 +1018,15 @@ Result<std::string, BTFError> BTF::parseString(IFileReader &file_reader,
     output = buffer;
 
   } catch (const FileReaderError &error) {
+    return convertFileReaderError(error);
+  }
+
+  try {
+    file_reader.seek(original_offset);
+  } catch (const FileReaderError &error) {
     output = convertFileReaderError(error);
   }
 
-  file_reader.seek(original_offset);
   return output;
 }
 

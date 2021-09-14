@@ -29,6 +29,8 @@ IStream::Ptr FstreamAdapter::create(const std::filesystem::path &path) {
 FstreamAdapter::~FstreamAdapter() {}
 
 bool FstreamAdapter::seek(std::uint64_t offset) {
+  input_stream.clear();
+
   input_stream.seekg(static_cast<std::streamoff>(offset));
   if (!input_stream) {
     return false;

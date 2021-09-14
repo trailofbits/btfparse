@@ -42,6 +42,7 @@ struct BTFErrorInformation final {
     InvalidRestrictBTFTypeEncoding,
     InvalidVarBTFTypeEncoding,
     InvalidDataSecBTFTypeEncoding,
+    InvalidStringOffset,
   };
 
   struct FileRange final {
@@ -139,6 +140,10 @@ struct BTFErrorInformationPrinter final {
 
     case BTFErrorInformation::Code::InvalidDataSecBTFTypeEncoding:
       buffer << "Invalid encoding for `DataSec` BTFType";
+      break;
+
+    case BTFErrorInformation::Code::InvalidStringOffset:
+      buffer << "Invalid string offset";
       break;
     }
 
@@ -325,6 +330,7 @@ using BTFType =
                  FloatBTFType>;
 
 using BTFTypeMap = std::map<std::uint32_t, BTFType>;
+using PathList = std::vector<std::filesystem::path>;
 
 class IBTF {
 public:
@@ -332,6 +338,9 @@ public:
 
   static Result<Ptr, BTFError>
   createFromPath(const std::filesystem::path &path) noexcept;
+
+  static Result<Ptr, BTFError>
+  createFromPathList(const PathList &path_list) noexcept;
 
   virtual std::optional<BTFType> getType(std::uint32_t id) const noexcept = 0;
   virtual std::optional<BTFKind> getKind(std::uint32_t id) const noexcept = 0;

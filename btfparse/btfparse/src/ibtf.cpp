@@ -14,8 +14,13 @@ namespace btfparse {
 
 Result<IBTF::Ptr, BTFError>
 IBTF::createFromPath(const std::filesystem::path &path) noexcept {
+  return IBTF::createFromPathList({path});
+}
+
+Result<IBTF::Ptr, BTFError>
+IBTF::createFromPathList(const PathList &path_list) noexcept {
   try {
-    return Ptr(new BTF(path));
+    return Ptr(new BTF(path_list));
 
   } catch (const std::bad_alloc &) {
     return BTFError(BTFErrorInformation{

@@ -15,20 +15,25 @@ namespace {
 
 void showHelp() {
   std::cerr << "Usage:\n"
-            << "\tdump-btf /sys/kernel/btf/vmlinux\n";
+            << "\tdump-btf /sys/kernel/btf/vmlinux\n"
+            << "\tdump-btf /sys/kernel/btf/vmlinux [/sys/kernel/btf/btusb]\n";
 }
 
 } // namespace
 
 int main(int argc, char *argv[]) {
-  if (argc != 2 || std::strcmp(argv[1], "--help") == 0) {
+  if (argc <= 1 || std::strcmp(argv[1], "--help") == 0) {
     showHelp();
     return 0;
   }
 
-  const char *input_path = argv[1];
+  std::vector<std::filesystem::path> path_list;
+  for (int i = 1; i < argc; ++i) {
+    const char *input_path = argv[i];
+    path_list.emplace_back(input_path);
+  }
 
-  auto btf_res = btfparse::IBTF::createFromPath(input_path);
+  auto btf_res = btfparse::IBTF::createFromPathList(path_list);
   if (btf_res.failed()) {
     std::cerr << "Failed to open the BTF file: " << btf_res.takeError() << "\n";
     return 1;
