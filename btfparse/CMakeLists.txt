@@ -9,3 +9,4 @@
 add_subdirectory("utils")
 add_subdirectory("filereader")
 add_subdirectory("btfparse")
+add_subdirectory("btftollvm")
