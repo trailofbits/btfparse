@@ -49,4 +49,9 @@ if(BTFPARSE_ENABLE_TESTS)
     btfparse-filereader
     thirdparty_doctest
   )
+
+  add_test(
+    NAME btfparse-filereader-tests
+    COMMAND btfparse-filereader-tests
+  )
 endif()
