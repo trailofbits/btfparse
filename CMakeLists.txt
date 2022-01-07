@@ -31,7 +31,4 @@ generateSettingsTargets()
 
 add_subdirectory("libraries")
 add_subdirectory("btfparse")
-
-if(BTFPARSE_ENABLE_TOOLS)
-  add_subdirectory("tools")
-endif()
+add_subdirectory("tools")

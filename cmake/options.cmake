@@ -20,5 +20,6 @@ if(NOT "${CMAKE_BUILD_TYPE}" STREQUAL "Release" AND
   set(CMAKE_BUILD_TYPE "${default_cmake_build_type}" CACHE STRING "btfparse: Build type (default: ${default_cmake_build_type})" FORCE)
 endif()
 
-option(BTFPARSE_ENABLE_TOOLS "Set to ON to build the tools" false)
+option(BTFPARSE_ENABLE_DUMPBTF "Set to ON to build the dump-btf tool" true)
+option(BTFPARSE_ENABLE_BTFPARSELLVM "Set to ON to build the btfparse-llvm utility library" true)
 option(BTFPARSE_ENABLE_TESTS "Set to ON to build the tests" true)

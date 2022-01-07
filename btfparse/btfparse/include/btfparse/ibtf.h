@@ -15,7 +15,6 @@
 #include <map>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <vector>
 
 namespace btfparse {
@@ -57,106 +56,7 @@ struct BTFErrorInformation final {
 };
 
 struct BTFErrorInformationPrinter final {
-  std::string operator()(const BTFErrorInformation &error_information) const {
-    std::stringstream buffer;
-    buffer << "Error: '";
-
-    switch (error_information.code) {
-    case BTFErrorInformation::Code::Unknown:
-      buffer << "Unknown error";
-      break;
-
-    case BTFErrorInformation::Code::MemoryAllocationFailure:
-      buffer << "Memory allocation failure";
-      break;
-
-    case BTFErrorInformation::Code::FileNotFound:
-      buffer << "File not found";
-      break;
-
-    case BTFErrorInformation::Code::IOError:
-      buffer << "IO error";
-      break;
-
-    case BTFErrorInformation::Code::InvalidMagicValue:
-      buffer << "Invalid magic value";
-      break;
-
-    case BTFErrorInformation::Code::InvalidBTFKind:
-      buffer << "Invalid BTF kind";
-      break;
-
-    case BTFErrorInformation::Code::UnsupportedBTFKind:
-      buffer << "Unsupported BTF kind";
-      break;
-
-    case BTFErrorInformation::Code::InvalidIntBTFTypeEncoding:
-      buffer << "Invalid encoding for `Int` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidPtrBTFTypeEncoding:
-      buffer << "Invalid encoding for `Ptr` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidArrayBTFTypeEncoding:
-      buffer << "Invalid encoding for `Array` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidTypedefBTFTypeEncoding:
-      buffer << "Invalid encoding for `Typedef` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidEnumBTFTypeEncoding:
-      buffer << "Invalid encoding for `Enum` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidFuncProtoBTFTypeEncoding:
-      buffer << "Invalid encoding for `FuncProto` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidVolatileBTFTypeEncoding:
-      buffer << "Invalid encoding for `Volatile` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidFwdBTFTypeEncoding:
-      buffer << "Invalid encoding for `Fwd` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidFuncBTFTypeEncoding:
-      buffer << "Invalid encoding for `Func` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidFloatBTFTypeEncoding:
-      buffer << "Invalid encoding for `Float` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidRestrictBTFTypeEncoding:
-      buffer << "Invalid encoding for `Restrict` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidVarBTFTypeEncoding:
-      buffer << "Invalid encoding for `Var` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidDataSecBTFTypeEncoding:
-      buffer << "Invalid encoding for `DataSec` BTFType";
-      break;
-
-    case BTFErrorInformation::Code::InvalidStringOffset:
-      buffer << "Invalid string offset";
-      break;
-    }
-
-    buffer << "'";
-
-    if (error_information.opt_file_range.has_value()) {
-      const auto &file_range = error_information.opt_file_range.value();
-      buffer << ", File range: " << file_range.offset << " - "
-             << (file_range.offset + file_range.size);
-    }
-
-    return buffer.str();
-  }
+  std::string operator()(const BTFErrorInformation &error_information) const;
 };
 
 using BTFError = Error<BTFErrorInformation, BTFErrorInformationPrinter>;

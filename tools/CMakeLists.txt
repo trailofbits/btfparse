@@ -6,4 +6,10 @@
 # the LICENSE file found in the root directory of this source tree.
 #
 
-add_subdirectory("dump-btf")
+if(BTFPARSE_ENABLE_DUMPBTF)
+  add_subdirectory("dump-btf")
+endif()
+
+if(BTFPARSE_ENABLE_BTFPARSELLVM)
+  add_subdirectory("btfparse-llvm")
+endif()
