@@ -17,3 +17,11 @@ target_link_libraries(dump-btf PRIVATE
   btfparse_cxx_target_settings
   btfparse
 )
+
+if(BTFPARSE_ENABLE_TESTS)
+  add_test(
+    NAME dump-btf_bpftool_compatibility
+    COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/bpftool_compatibility.sh"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+endif()

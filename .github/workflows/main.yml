@@ -66,7 +66,11 @@ jobs:
       run: git submodule update --init --recursive
 
     - name: Install system dependencies
-      run: sudo apt-get install ccache ninja-build -y
+      run: |
+        sudo apt-get install -y \
+          ccache \
+          ninja-build \
+          linux-tools-common
 
     - name: Install CMake
       id: cmake_installer
@@ -115,4 +119,3 @@ jobs:
     - name: Run the tests
       run: |
         cmake --build build --target test
-
