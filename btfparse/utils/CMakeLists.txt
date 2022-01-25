@@ -14,6 +14,7 @@ target_include_directories(btfparse-utils SYSTEM INTERFACE
 if(BTFPARSE_ENABLE_TESTS)
   add_executable(btfparse-utils-tests
     tests/main.cpp
+    tests/result.cpp
   )
 
   target_include_directories(btfparse-utils-tests PRIVATE
