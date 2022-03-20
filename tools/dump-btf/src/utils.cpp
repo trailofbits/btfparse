@@ -248,8 +248,21 @@ std::ostream &operator<<(std::ostream &stream,
 std::ostream &operator<<(std::ostream &stream,
                          const btfparse::VarBTFType &type) {
   stream << "'" << type.name << "' "
-         << "type_id=" << type.type << " "
-         << "linkage=" << type.linkage;
+         << "type_id=" << type.type << ", "
+         << "linkage=";
+
+  switch (type.linkage) {
+  case 0:
+    stream << "static";
+    break;
+
+  case 1:
+    stream << "global-alloc";
+    break;
+
+  default:
+    stream << type.linkage;
+  }
 
   return stream;
 }
@@ -268,7 +281,8 @@ std::ostream &operator<<(std::ostream &stream,
        ++it) {
     const auto &variable = *it;
 
-    stream << "type_id=" << variable.type << "offset=" << variable.offset << " "
+    stream << "\ttype_id=" << variable.type << " offset=" << variable.offset
+           << " "
            << "size=" << variable.size;
 
     if (std::next(it, 1) != type.variable_list.end()) {

@@ -14,6 +14,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <sstream>
 
 namespace btfparse {
 
