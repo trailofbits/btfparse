@@ -281,7 +281,8 @@ std::ostream &operator<<(std::ostream &stream,
        ++it) {
     const auto &variable = *it;
 
-    stream << "type_id=" << variable.type << "offset=" << variable.offset << " "
+    stream << "\ttype_id=" << variable.type << " offset=" << variable.offset
+           << " "
            << "size=" << variable.size;
 
     if (std::next(it, 1) != type.variable_list.end()) {
