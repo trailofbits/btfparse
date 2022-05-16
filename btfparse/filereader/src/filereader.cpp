@@ -8,9 +8,9 @@
 
 #include "filereader.h"
 
+#include <array>
 #include <cstring>
 #include <fstream>
-#include <vector>
 
 namespace btfparse {
 
