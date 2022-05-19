@@ -19,14 +19,16 @@ btfparse is a C++ library that parses kernel debug symbols in BTF format.
 
 ```bash
 git clone https://github.com/trailofbits/btfparse
+cd btfparse
+git submodule update --init
 ```
 
 **Configure the project**
 
 ```bash
-cmake \
-  -S btfparse \
-  -B btfparse-build \
+mkdir build
+cd build
+cmake .. \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DBTFPARSE_ENABLE_TOOLS=true \
   -DBTFPARSE_ENABLE_TESTS=true
@@ -36,15 +38,23 @@ cmake \
 
 ```bash
 cmake \
-  --build btfparse-build \
+  --build . \
   -j $(nproc)
 ```
 
 **Running the tests**
 
+The tests require `bpftool` which can be installed in Ubuntu via the `linux-tools-generic` package:
+
+```bash
+sudo apt-get install linux-tools-generic
+```
+
+Then, tests can be run:
+
 ```bash
 cmake \
-  --build btfparse-build \
+  --build . \
   --target test
 ```
 
