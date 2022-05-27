@@ -27,8 +27,6 @@ if(BTFPARSE_ENABLE_TESTS)
   enable_testing()
 endif()
 
-generateSettingsTargets()
-
 add_subdirectory("libraries")
 add_subdirectory("btfparse")
 

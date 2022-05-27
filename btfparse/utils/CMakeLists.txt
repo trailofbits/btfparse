@@ -6,25 +6,25 @@
 # the LICENSE file found in the root directory of this source tree.
 #
 
-add_library(btfparse-utils INTERFACE)
-target_include_directories(btfparse-utils SYSTEM INTERFACE
+add_library("btfparse-utils" INTERFACE)
+target_include_directories("btfparse-utils" SYSTEM INTERFACE
   include
 )
 
 if(BTFPARSE_ENABLE_TESTS)
-  add_executable(btfparse-utils-tests
+  add_executable("btfparse-utils-tests"
     tests/main.cpp
     tests/result.cpp
   )
 
-  target_include_directories(btfparse-utils-tests PRIVATE
+  target_include_directories("btfparse-utils-tests" PRIVATE
     src
   )
 
-  target_link_libraries(btfparse-utils-tests PRIVATE
-    btfparse_cxx_target_settings
-    btfparse-utils
-    thirdparty_doctest
+  target_link_libraries("btfparse-utils-tests" PRIVATE
+    "btfparse_cxx_settings"
+    "btfparse-utils"
+    "external::doctest"
   )
 
   add_test(

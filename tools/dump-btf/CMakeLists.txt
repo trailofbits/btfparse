@@ -6,16 +6,16 @@
 # the LICENSE file found in the root directory of this source tree.
 #
 
-add_executable(dump-btf
+add_executable("dump-btf"
   src/main.cpp
 
   src/utils.h
   src/utils.cpp
 )
 
-target_link_libraries(dump-btf PRIVATE
-  btfparse_cxx_target_settings
-  btfparse
+target_link_libraries("dump-btf" PRIVATE
+  "btfparse_cxx_settings"
+  "btfparse"
 )
 
 if(BTFPARSE_ENABLE_TESTS)

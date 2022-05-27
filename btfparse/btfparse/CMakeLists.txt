@@ -6,7 +6,7 @@
 # the LICENSE file found in the root directory of this source tree.
 #
 
-add_library(btfparse
+add_library("btfparse"
   include/btfparse/ibtf.h
   src/ibtf.cpp
 
@@ -16,19 +16,19 @@ add_library(btfparse
   src/btf_types.h
 )
 
-target_link_libraries(btfparse
+target_link_libraries("btfparse"
   PRIVATE
-    btfparse_cxx_target_settings
+    "btfparse_cxx_settings"
 
   PUBLIC
-    btfparse-utils
-    btfparse-filereader
+    "btfparse-utils"
+    "btfparse-filereader"
 )
 
-target_include_directories(btfparse PRIVATE
+target_include_directories("btfparse" PRIVATE
   include
 )
 
-target_include_directories(btfparse SYSTEM INTERFACE
+target_include_directories("btfparse" SYSTEM INTERFACE
   include
 )

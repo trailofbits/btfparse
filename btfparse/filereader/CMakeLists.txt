@@ -6,7 +6,7 @@
 # the LICENSE file found in the root directory of this source tree.
 #
 
-add_library(btfparse-filereader
+add_library("btfparse-filereader"
   include/btfparse/istream.h
 
   include/btfparse/ifilereader.h
@@ -19,35 +19,35 @@ add_library(btfparse-filereader
   src/fstreamadapter.cpp
 )
 
-target_link_libraries(btfparse-filereader
+target_link_libraries("btfparse-filereader"
   PRIVATE
-    btfparse_cxx_target_settings
+    "btfparse_cxx_settings"
 
   PUBLIC
-    btfparse-utils
+    "btfparse-utils"
 )
 
-target_include_directories(btfparse-filereader PRIVATE
+target_include_directories("btfparse-filereader" PRIVATE
   include
 )
 
-target_include_directories(btfparse-filereader SYSTEM INTERFACE
+target_include_directories("btfparse-filereader" SYSTEM INTERFACE
   include
 )
 
 if(BTFPARSE_ENABLE_TESTS)
-  add_executable(btfparse-filereader-tests
+  add_executable("btfparse-filereader-tests"
     tests/main.cpp
   )
 
-  target_include_directories(btfparse-filereader-tests PRIVATE
+  target_include_directories("btfparse-filereader-tests" PRIVATE
     src
   )
 
-  target_link_libraries(btfparse-filereader-tests PRIVATE
-    btfparse_cxx_target_settings
-    btfparse-filereader
-    thirdparty_doctest
+  target_link_libraries("btfparse-filereader-tests" PRIVATE
+    "btfparse_cxx_settings"
+    "btfparse-filereader"
+    "external::doctest"
   )
 
   add_test(
