@@ -22,3 +22,5 @@ endif()
 
 option(BTFPARSE_ENABLE_TOOLS "Set to ON to build the tools" false)
 option(BTFPARSE_ENABLE_TESTS "Set to ON to build the tests" true)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS true CACHE BOOL "Export the compile_commands.json file (forced)" FORCE)
