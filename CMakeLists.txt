@@ -7,11 +7,10 @@
 #
 
 cmake_minimum_required(VERSION 3.16.4)
+project("btfparse")
 
 include("cmake/options.cmake")
 include("cmake/utils.cmake")
-
-project("BTFParse")
 
 # Needed to be able to check if the compiler supports linking with PIE,
 # otherwise the resulting executable or shared library won't be PIE.
