@@ -23,6 +23,17 @@ set_target_properties("btfparse_common_settings" PROPERTIES
     true
 )
 
+if(BTFPARSE_OMIT_FRAME_POINTERS)
+  target_compile_options("btfparse_common_settings" INTERFACE
+    -fomit-frame-pointer
+  )
+
+else()
+  target_compile_options("btfparse_common_settings" INTERFACE
+    -fno-omit-frame-pointer
+  )
+endif()
+
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
   target_compile_options("btfparse_common_settings" INTERFACE
     -O0
