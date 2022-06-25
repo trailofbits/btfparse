@@ -10,8 +10,14 @@ add_library("btfparse"
   include/btfparse/ibtf.h
   src/ibtf.cpp
 
+  include/btfparse/ibtfheadergenerator.h
+  src/ibtfheadergenerator.cpp
+
   src/btf.h
   src/btf.cpp
+
+  src/btfheadergenerator.h
+  src/btfheadergenerator.cpp
 
   src/btf_types.h
 )

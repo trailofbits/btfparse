@@ -6,5 +6,11 @@
 # the LICENSE file found in the root directory of this source tree.
 #
 
-add_subdirectory("dump-btf")
-add_subdirectory("include-gen")
+add_executable("include-gen"
+  src/main.cpp
+)
+
+target_link_libraries("include-gen" PRIVATE
+  "btfparse_cxx_settings"
+  "btfparse"
+)

@@ -6,16 +6,20 @@
 // the LICENSE file found in the root directory of this source tree.
 //
 
-#include "utils.h"
-
+#include <algorithm>
 #include <cstring>
+#include <iostream>
+#include <sstream>
+
+#include <btfparse/ibtfheadergenerator.h>
 
 namespace {
 
 void showHelp() {
-  std::cerr << "Usage:\n"
-            << "\tdump-btf /sys/kernel/btf/vmlinux\n"
-            << "\tdump-btf /sys/kernel/btf/vmlinux [/sys/kernel/btf/btusb]\n";
+  std::cerr
+      << "Usage:\n"
+      << "\tinclude-gen /sys/kernel/btf/vmlinux\n"
+      << "\tinclude-gen /sys/kernel/btf/vmlinux [/sys/kernel/btf/btusb]\n";
 }
 
 } // namespace
@@ -44,13 +48,14 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  for (const auto &btf_type_map_p : btf->getAll()) {
-    const auto &id = btf_type_map_p.first;
-    const auto &btf_type = btf_type_map_p.second;
+  auto header_generator = btfparse::IBTFHeaderGenerator::create();
 
-    std::cout << "[" << id << "] " << btfparse::IBTF::getBTFTypeKind(btf_type)
-              << " " << btf_type << "\n";
+  std::string header;
+  if (!header_generator->generate(header, btf)) {
+    std::cerr << "Failed to generate the header\n";
+    return 1;
   }
 
+  std::cout << header << "\n";
   return 0;
 }

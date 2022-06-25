@@ -291,7 +291,7 @@ struct VarBTFType final {
 struct DataSecBTFType final {
   struct Variable final {
     std::uint32_t type{};
-    std::uint32_t offset;
+    std::uint32_t offset{};
     std::uint32_t size{};
   };
 
