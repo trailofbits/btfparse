@@ -80,6 +80,8 @@ public:
                                    const std::uint32_t &parent,
                                    const std::uint32_t &id);
 
+  static bool adjustTypedefDependencyLoops(Context &context);
+
   static bool createTypeQueue(Context &context);
   static bool createTypeQueueHelper(Context &context, const std::uint32_t &id);
 

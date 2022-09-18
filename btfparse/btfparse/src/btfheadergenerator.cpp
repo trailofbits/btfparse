@@ -66,6 +66,10 @@ bool BTFHeaderGenerator::generate(std::string &header,
     return false;
   }
 
+  if (!adjustTypedefDependencyLoops(context)) {
+    return false;
+  }
+
   std::cerr << "createTypeQueue" << std::endl;
   if (!createTypeQueue(context)) {
     return false;
@@ -782,6 +786,77 @@ bool BTFHeaderGenerator::createTypeTreeHelper(Context &context,
       return false;
     }
   }
+
+  return true;
+}
+
+bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
+  // TODO(alessandro): We should just have a list of types
+  // that need to be re-evaluated
+  bool try_again{false};
+
+  do {
+    try_again = false;
+
+    for (const auto &struct_id : context.top_level_type_list) {
+      if (!isTopLevelTypeDeclaration(context, struct_id)) {
+        continue;
+      }
+
+      auto &struct_btf_type = context.btf_type_map.at(struct_id);
+
+      auto btf_kind = btfparse::IBTF::getBTFTypeKind(struct_btf_type);
+      if (btf_kind != btfparse::BTFKind::Struct &&
+          btf_kind != btfparse::BTFKind::Union) {
+        continue;
+      }
+
+      auto is_union = btf_kind == btfparse::BTFKind::Union;
+
+      auto struct_dependency_list_it = context.type_tree.find(struct_id);
+      if (struct_dependency_list_it == context.type_tree.end()) {
+        continue;
+      }
+
+      auto &struct_dependency_list = struct_dependency_list_it->second;
+
+      auto opt_struct_name = getTypeName(context, struct_id);
+      if (!opt_struct_name.has_value()) {
+        // Since this is a top level type, this should not be possible
+        return false;
+      }
+
+      for (const auto &p : struct_dependency_list) {
+        auto &typedef_id = p.first;
+        auto &typedef_btf_type = context.btf_type_map.at(typedef_id);
+
+        btf_kind = btfparse::IBTF::getBTFTypeKind(typedef_btf_type);
+        if (btf_kind != btfparse::BTFKind::Typedef) {
+          continue;
+        }
+
+        auto typedef_dependency_list_it = context.type_tree.find(typedef_id);
+        if (typedef_dependency_list_it == context.type_tree.end()) {
+          // This typedef may not have a top level dependency. If that is
+          // the case, then skip it
+          continue;
+        }
+
+        auto &typedef_dependency_list = typedef_dependency_list_it->second;
+        if (typedef_dependency_list.count(struct_id) == 0) {
+          continue;
+        }
+
+        typedef_dependency_list.erase(struct_id);
+
+        auto fwd_id = createFwdType(context, is_union, opt_struct_name.value());
+        typedef_dependency_list.insert({fwd_id, false});
+
+        try_again = true;
+      }
+    }
+
+  } while (!try_again);
 
   return true;
 }
