@@ -1809,6 +1809,15 @@ bool BTFHeaderGenerator::generateHeader(Context &context,
   for (const auto &id : context.type_queue) {
     resetState(context);
 
+    {
+      auto opt_name = getTypeName(context, id);
+
+      const auto &name = opt_name.value();
+      if (name.find("__builtin_") == 0) {
+        continue;
+      }
+    }
+
     if (!generateType(context, buffer, id, true)) {
       return false;
     }
