@@ -352,6 +352,31 @@ bool BTFHeaderGenerator::getTypeDependencies(
   case BTFKind::Typedef: {
     const auto &typedef_btf_type = getTypeAs<TypedefBTFType>(btf_type);
     dependency_list.push_back(typedef_btf_type.type);
+
+    if (typedef_btf_type.type == 0) {
+      break;
+    }
+
+    const auto &child_btf_type = context.btf_type_map.at(typedef_btf_type.type);
+    auto child_btf_kind = IBTF::getBTFTypeKind(child_btf_type);
+
+    bool recurse{false};
+    if (child_btf_kind == BTFKind::Struct) {
+      const auto &child_struct_type = getTypeAs<StructBTFType>(child_btf_type);
+      recurse = !child_struct_type.opt_name.has_value();
+
+    } else if (child_btf_kind == BTFKind::Union) {
+      const auto &child_union_type = getTypeAs<UnionBTFType>(child_btf_type);
+      recurse = !child_union_type.opt_name.has_value();
+    }
+
+    if (recurse) {
+      if (!getTypeDependencies(context, dependency_list,
+                               typedef_btf_type.type)) {
+        return false;
+      }
+    }
+
     break;
   }
 
