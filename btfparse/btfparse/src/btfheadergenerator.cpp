@@ -48,20 +48,16 @@ bool BTFHeaderGenerator::generate(std::string &header,
   header.clear();
 
   Context context;
-  std::cerr << "saveBTFTypeMap" << std::endl;
   if (!saveBTFTypeMap(context, btf)) {
     return false;
   }
 
-  std::cerr << "adjustTypeNames" << std::endl;
   if (!adjustTypeNames(context)) {
     return false;
   }
 
-  std::cerr << "scanTypes" << std::endl;
   scanTypes(context);
 
-  std::cerr << "createTypeTree" << std::endl;
   if (!createTypeTree(context)) {
     return false;
   }
@@ -70,12 +66,10 @@ bool BTFHeaderGenerator::generate(std::string &header,
     return false;
   }
 
-  std::cerr << "createTypeQueue" << std::endl;
   if (!createTypeQueue(context)) {
     return false;
   }
 
-  std::cerr << "generateHeader" << std::endl;
   std::stringstream buffer;
   if (!generateHeader(context, buffer)) {
     return false;
@@ -562,52 +556,6 @@ bool BTFHeaderGenerator::createTypeTree(Context &context) {
     }
   }
 
-  // TODO(alessandro): This will generate an xdot graph that is useful
-  // to debug dependencies
-  std::stringstream buffer;
-  std::unordered_set<std::uint32_t> label_list;
-
-  for (const auto &p : context.type_tree) {
-    const auto &parent = p.first;
-    label_list.insert(parent);
-
-    buffer.str("");
-    label_list.clear();
-
-    buffer << "digraph btf {\n";
-
-    const auto &linked_type_map = p.second;
-
-    for (const auto &linked_type : linked_type_map) {
-      const auto &type_id = linked_type.first;
-      const auto &weak_connection = linked_type.second;
-
-      label_list.insert(type_id);
-
-      buffer << "  " << parent << " -> " << type_id;
-      if (weak_connection) {
-        buffer << " [style=dotted]";
-      }
-      buffer << ";\n";
-    }
-
-    for (const auto &id : label_list) {
-      buffer << "  " << id << " [label=\"";
-      auto opt_name = getTypeName(context, id);
-      buffer << opt_name.value();
-      buffer << " - " << id;
-      buffer << "\"];\n";
-    }
-
-    buffer << "}\n";
-
-    auto file_name = std::string("graph/") + std::to_string(parent) + "_" +
-                     getTypeName(context, parent).value() + ".xdot";
-    std::fstream out(file_name.c_str(), std::ios::trunc | std::ios::out);
-    out << buffer.str();
-    out.close();
-  }
-
   return true;
 }
 
@@ -700,23 +648,18 @@ bool BTFHeaderGenerator::createTypeTreeHelper(Context &context,
     case btfparse::BTFKind::Enum:
       break;
 
-    default:
-      // TODO(alessandro): This should never happen
-      std::cerr << "halting at KIND " << static_cast<int>(btf_kind)
-                << std::endl;
-      std::cerr << "type id is " << id << std::endl;
+    default: {
+      std::stringstream error_buffer;
+      error_buffer << "Invalid state. Encountered a BTF type #" << id
+                   << " of unexpected kind: " << static_cast<int>(btf_kind);
 
-      throw std::runtime_error("error");
+      throw std::logic_error(error_buffer.str());
+    }
     }
 
     // this should only filter out things like INT, FLOAT, etc.
     // should add a throw just in case
     return true;
-  }
-
-  // TODO(alessandro): This should never happen
-  if (!getTypeName(context, id).has_value()) {
-    throw std::runtime_error("UNEXPECTED");
   }
 
   auto link_list_it = context.type_tree.find(parent);
@@ -775,11 +718,6 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
     try_again = false;
 
     for (const auto &struct_id : context.top_level_type_list) {
-      // TODO(alessandro): Remove this?
-      if (!isTopLevelTypeDeclaration(context, struct_id)) {
-        continue;
-      }
-
       auto &struct_btf_type = context.btf_type_map.at(struct_id);
 
       auto btf_kind = btfparse::IBTF::getBTFTypeKind(struct_btf_type);
@@ -837,23 +775,8 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
 
   } while (!try_again);
 
-  // All the structs and unions that depend on the typedefs we changed
-  // need to be updated to have a strong reference to the underlying type
-  // if the connection to the typedef was also strong
+  // Update the types that depend on the typedefs we patched
   for (const auto &struct_id : context.top_level_type_list) {
-    // TODO(alessandro): Remove this?
-    if (!isTopLevelTypeDeclaration(context, struct_id)) {
-      continue;
-    }
-
-    // auto &struct_btf_type = context.btf_type_map.at(struct_id);
-
-    /*auto btf_kind = btfparse::IBTF::getBTFTypeKind(struct_btf_type);
-    if (btf_kind != btfparse::BTFKind::Struct &&
-        btf_kind != btfparse::BTFKind::Union) {
-      continue;
-    }*/
-
     auto struct_dependency_list_it = context.type_tree.find(struct_id);
     if (struct_dependency_list_it == context.type_tree.end()) {
       continue;
@@ -870,10 +793,6 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
       }
 
       auto weak_reference = struct_dependency_list.at(typedef_id);
-      // if (weak_reference) {
-      //   continue;
-      // }
-
       struct_dependency_list.insert({typedef_struct_id, weak_reference});
     }
   }
