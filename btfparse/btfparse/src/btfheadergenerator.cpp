@@ -266,7 +266,7 @@ void BTFHeaderGenerator::scanTypes(Context &context) {
     context.highest_btf_type_id = std::max(context.highest_btf_type_id, id);
 
     const auto &btf_type = p.second;
-    auto skip_type{true};
+    bool skip_type{true};
 
     switch (IBTF::getBTFTypeKind(btf_type)) {
     case BTFKind::Struct:
@@ -562,57 +562,6 @@ bool BTFHeaderGenerator::createTypeTree(Context &context) {
     }
   }
 
-  // TODO(alessandro): This is test code for dependency loop, but it's
-  // not complete
-  /*for (const auto &id : context.top_level_type_list) {
-    {
-      const auto &btf_type = context.btf_type_map.at(id);
-
-      auto btf_kind = btfparse::IBTF::getBTFTypeKind(btf_type);
-      if (btf_kind != btfparse::BTFKind::Struct &&
-          btf_kind != btfparse::BTFKind::Union) {
-        continue;
-      }
-    }
-
-    auto linked_type_list_it = context.type_tree.find(id);
-    if (linked_type_list_it == context.type_tree.end()) {
-      continue;
-    }
-
-    const auto &linked_type_list = linked_type_list_it->second;
-    auto opt_name = getTypeName(context, id);
-
-    for (const auto &p : linked_type_list) {
-      const auto &linked_type = p.first;
-      auto &linked_btf_type = context.btf_type_map.at(linked_type);
-
-      {
-        auto linked_btf_kind = btfparse::IBTF::getBTFTypeKind(linked_btf_type);
-        if (linked_btf_kind != btfparse::BTFKind::Typedef) {
-          continue;
-        }
-      }
-
-      auto typedef_linked_type_list_it = context.type_tree.find(linked_type);
-      if (typedef_linked_type_list_it == context.type_tree.end()) {
-        continue;
-      }
-
-      auto &typedef_linked_type_list = typedef_linked_type_list_it->second;
-      if (typedef_linked_type_list.count(id) == 0 ||
-          typedef_linked_type_list.at(id)) {
-        continue;
-      }
-
-      typedef_linked_type_list.erase(id);
-      typedef_linked_type_list.insert({id, true});
-
-      std::cerr << "Forcing " << linked_type << " link to " << id << " as weak
-  ref\n";
-    }
-  }*/
-
   // TODO(alessandro): This will generate an xdot graph that is useful
   // to debug dependencies
   std::stringstream buffer;
@@ -789,7 +738,7 @@ bool BTFHeaderGenerator::createTypeTreeHelper(Context &context,
   } else {
     // always upgrade from weak to strong link
     auto &link_kind = link_it->second;
-    if (link_kind == true) {
+    if (link_kind) {
       link_kind = weak_reference;
     }
   }
@@ -820,10 +769,13 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
   // that need to be re-evaluated
   bool try_again{false};
 
+  std::unordered_map<std::uint32_t, std::uint32_t> typedef_map;
+
   do {
     try_again = false;
 
     for (const auto &struct_id : context.top_level_type_list) {
+      // TODO(alessandro): Remove this?
       if (!isTopLevelTypeDeclaration(context, struct_id)) {
         continue;
       }
@@ -877,11 +829,54 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
         auto fwd_id = createFwdType(context, is_union, opt_struct_name.value());
         typedef_dependency_list.insert({fwd_id, false});
 
+        typedef_map.insert({typedef_id, struct_id});
+
         try_again = true;
       }
     }
 
   } while (!try_again);
+
+  // All the structs and unions that depend on the typedefs we changed
+  // need to be updated to have a strong reference to the underlying type
+  // if the connection to the typedef was also strong
+  for (const auto &struct_id : context.top_level_type_list) {
+    // TODO(alessandro): Remove this?
+    if (!isTopLevelTypeDeclaration(context, struct_id)) {
+      continue;
+    }
+
+    // auto &struct_btf_type = context.btf_type_map.at(struct_id);
+
+    /*auto btf_kind = btfparse::IBTF::getBTFTypeKind(struct_btf_type);
+    if (btf_kind != btfparse::BTFKind::Struct &&
+        btf_kind != btfparse::BTFKind::Union) {
+      continue;
+    }*/
+
+    auto struct_dependency_list_it = context.type_tree.find(struct_id);
+    if (struct_dependency_list_it == context.type_tree.end()) {
+      continue;
+    }
+
+    auto &struct_dependency_list = struct_dependency_list_it->second;
+
+    for (const auto &p : typedef_map) {
+      const auto &typedef_id = p.first;
+      const auto &typedef_struct_id = p.second;
+
+      if (struct_dependency_list.count(typedef_id) == 0) {
+        continue;
+      }
+
+      auto weak_reference = struct_dependency_list.at(typedef_id);
+      // if (weak_reference) {
+      //   continue;
+      // }
+
+      struct_dependency_list.insert({typedef_struct_id, weak_reference});
+    }
+  }
 
   return true;
 }
