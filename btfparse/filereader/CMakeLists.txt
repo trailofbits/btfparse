@@ -15,8 +15,8 @@ add_library("btfparse-filereader"
   src/filereader.h
   src/filereader.cpp
 
-  src/fstreamadapter.h
-  src/fstreamadapter.cpp
+  src/memoryfileadapter.h
+  src/memoryfileadapter.cpp
 )
 
 target_link_libraries("btfparse-filereader"
