@@ -10,25 +10,28 @@
 
 #include <btfparse/istream.h>
 
-#include <cstdint>
 #include <filesystem>
-#include <fstream>
+#include <vector>
 
 namespace btfparse {
 
-class FstreamAdapter final : public IStream {
-  mutable std::ifstream input_stream;
+class MemoryFileAdapter final : public IStream {
+private:
+  std::unique_ptr<char[]> file_buffer;
+  std::size_t file_pos;
+  const std::size_t file_buffer_size;
 
 public:
+  MemoryFileAdapter() = delete;
   static Ptr create(const std::filesystem::path &path);
-  virtual ~FstreamAdapter() override;
+  virtual ~MemoryFileAdapter() override;
 
   virtual bool seek(std::uint64_t offset) override;
   virtual std::uint64_t offset() const override;
   virtual bool read(std::uint8_t *buffer, std::size_t size) override;
 
 private:
-  FstreamAdapter(const std::filesystem::path &path);
+  MemoryFileAdapter(std::unique_ptr<char[]> buffer, std::size_t size);
 };
 
 } // namespace btfparse

@@ -44,14 +44,11 @@ std::uint64_t FstreamAdapter::offset() const {
 }
 
 bool FstreamAdapter::read(std::uint8_t *buffer, std::size_t size) {
-  std::vector<char> temp_buffer(size);
-
-  input_stream.read(temp_buffer.data(), static_cast<int>(temp_buffer.size()));
+  input_stream.read(reinterpret_cast<char*>(buffer), static_cast<std::streamsize>(size));
   if (!input_stream) {
     return false;
   }
-
-  std::memcpy(buffer, temp_buffer.data(), temp_buffer.size());
+  
   return true;
 }
 
