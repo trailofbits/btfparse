@@ -7,7 +7,7 @@
 //
 
 #include "filereader.h"
-#include "fstreamadapter.h"
+#include "memoryfileadapter.h"
 
 #include <btfparse/ifilereader.h>
 
@@ -15,10 +15,10 @@ namespace btfparse {
 
 Result<IFileReader::Ptr, FileReaderError>
 IFileReader::open(const std::filesystem::path &path) noexcept {
-  FstreamAdapter::Ptr stream_ptr;
+  MemoryFileAdapter::Ptr memoryfile_ptr;
 
   try {
-    stream_ptr = FstreamAdapter::create(path);
+    memoryfile_ptr = MemoryFileAdapter::create(path);
 
   } catch (const std::bad_alloc &) {
     return FileReaderError(FileReaderErrorInformation{
@@ -29,7 +29,7 @@ IFileReader::open(const std::filesystem::path &path) noexcept {
     return e;
   }
 
-  return FileReader::create(std::move(stream_ptr));
+  return FileReader::create(std::move(memoryfile_ptr));
 }
 
 Result<IFileReader::Ptr, FileReaderError>
