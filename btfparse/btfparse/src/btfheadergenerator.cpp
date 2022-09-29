@@ -151,6 +151,50 @@ bool BTFHeaderGenerator::adjustTypeNames(Context &context) {
       }
     }
 
+    if (can_be_named) {
+      auto opt_current_type_name = getTypeName(context, id);
+      if (!opt_current_type_name.has_value()) {
+        if (!is_enum) {
+          continue;
+        }
+
+        // Sometimes enum with the same exact ID are re-used by two similar
+        // structs that have the same name. Always give them a name so that
+        // the type in C matches
+        auto new_name = "AnonymousEnum" + std::to_string(id);
+        if (!setTypeName(context, id, new_name)) {
+          return false;
+        }
+
+        opt_current_type_name = new_name;
+      }
+
+      auto current_type_name = opt_current_type_name.value();
+
+      auto key = current_type_name;
+      if (uses_tag_type) {
+        key = std::string("tag-") + key;
+      }
+
+      if (visited_name_list.count(key) > 0) {
+        if (!can_be_renamed) {
+          return false;
+        }
+
+        current_type_name += "_" + std::to_string(id);
+        if (!setTypeName(context, id, current_type_name)) {
+          return false;
+        }
+
+        key = current_type_name;
+        if (uses_tag_type) {
+          key = std::string("tag-") + key;
+        }
+      }
+
+      visited_name_list.insert(key);
+    }
+
     if (is_enum) {
       auto &btf_type = p.second;
       auto &enum_btf_type = getTypeAsMutable<EnumBTFType>(btf_type);
@@ -164,11 +208,7 @@ bool BTFHeaderGenerator::adjustTypeNames(Context &context) {
       }
 
       if (rename_values) {
-        auto enum_name =
-            enum_btf_type.opt_name.has_value()
-                ? enum_btf_type.opt_name.value()
-                : std::string("AnonymousEnum") + std::to_string(id);
-
+        const auto &enum_name = enum_btf_type.opt_name.value();
         for (auto &value : enum_btf_type.value_list) {
           value.name = enum_name + "_" + value.name;
         }
@@ -178,40 +218,6 @@ bool BTFHeaderGenerator::adjustTypeNames(Context &context) {
         visited_name_list.insert(value.name);
       }
     }
-
-    if (!can_be_named) {
-      continue;
-    }
-
-    auto opt_current_type_name = getTypeName(context, id);
-    if (!opt_current_type_name.has_value()) {
-      continue;
-    }
-
-    auto current_type_name = opt_current_type_name.value();
-
-    auto key = current_type_name;
-    if (uses_tag_type) {
-      key = std::string("tag-") + key;
-    }
-
-    if (visited_name_list.count(key) > 0) {
-      if (!can_be_renamed) {
-        return false;
-      }
-
-      current_type_name += "_" + std::to_string(id);
-      if (!setTypeName(context, id, current_type_name)) {
-        return false;
-      }
-
-      key = current_type_name;
-      if (uses_tag_type) {
-        key = std::string("tag-") + key;
-      }
-    }
-
-    visited_name_list.insert(key);
   }
 
   return true;
