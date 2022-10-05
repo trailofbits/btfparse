@@ -23,15 +23,31 @@ set_target_properties("btfparse_common_settings" PROPERTIES
     true
 )
 
-if(BTFPARSE_OMIT_FRAME_POINTERS)
+if(BTFPARSE_ENABLE_SANITIZERS)
+  set(flag_list
+    -fsanitize=undefined,address
+  )
+
   target_compile_options("btfparse_common_settings" INTERFACE
-    -fomit-frame-pointer
+    ${flag_list}
+    -fno-omit-frame-pointer
+  )
+
+  target_link_options("btfparse_common_settings" INTERFACE
+    ${flag_list}
   )
 
 else()
-  target_compile_options("btfparse_common_settings" INTERFACE
-    -fno-omit-frame-pointer
-  )
+  if(BTFPARSE_OMIT_FRAME_POINTERS)
+    target_compile_options("btfparse_common_settings" INTERFACE
+      -fomit-frame-pointer
+    )
+
+  else()
+    target_compile_options("btfparse_common_settings" INTERFACE
+      -fno-omit-frame-pointer
+    )
+  endif()
 endif()
 
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
