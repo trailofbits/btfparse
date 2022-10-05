@@ -9,10 +9,7 @@
 #include "btfheadergenerator.h"
 
 #include <algorithm>
-#include <exception>
-#include <fstream>
 #include <optional>
-#include <stdexcept>
 #include <variant>
 
 #include <btfparse/ibtf.h>
@@ -1483,6 +1480,7 @@ bool BTFHeaderGenerator::generateType(
     Context &context, std::stringstream &buffer, std::uint32_t id,
     const FuncProtoBTFType &func_proto_btf_type, bool as_type_definition) {
 
+  filterFuncProtoModifiers(context);
   generateTypeHeader(context, buffer, id);
   increaseIndent(context);
 
@@ -1847,6 +1845,27 @@ void BTFHeaderGenerator::popModifierList(Context &context) {
 
 void BTFHeaderGenerator::pushModifier(Context &context, std::uint32_t id) {
   context.modifier_list.push_back(id);
+}
+
+void BTFHeaderGenerator::filterFuncProtoModifiers(Context &context) {
+  for (auto modifier_it = context.modifier_list.begin();
+       modifier_it != context.modifier_list.end();) {
+
+    const auto &modifier = *modifier_it;
+
+    if (context.btf_type_map.count(modifier) == 0) {
+      continue;
+    }
+
+    const auto &btf_type = context.btf_type_map.at(modifier);
+
+    auto btf_kind = IBTF::getBTFTypeKind(btf_type);
+    if (btf_kind == BTFKind::Volatile) {
+      modifier_it = context.modifier_list.erase(modifier_it);
+    } else {
+      ++modifier_it;
+    }
+  }
 }
 
 bool BTFHeaderGenerator::generateLeftModifiers(Context &context,
