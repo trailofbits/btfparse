@@ -22,6 +22,7 @@ endif()
 
 option(BTFPARSE_ENABLE_TOOLS "Set to ON to build the tools" false)
 option(BTFPARSE_ENABLE_TESTS "Set to ON to build the tests" false)
-option(BTFPARSE_OMIT_FRAME_POINTERS "Set to ON to omit frame pointers" true)
+option(BTFPARSE_OMIT_FRAME_POINTERS "Set to ON to omit frame pointers" false)
+option(BTFPARSE_ENABLE_SANITIZERS "Set to ON to enable sanitizers" false)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS true CACHE BOOL "Export the compile_commands.json file (forced)" FORCE)
