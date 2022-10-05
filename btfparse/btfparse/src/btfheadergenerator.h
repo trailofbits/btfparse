@@ -191,6 +191,8 @@ public:
   static void popModifierList(Context &context);
   static void pushModifier(Context &context, std::uint32_t id);
 
+  static void filterFuncProtoModifiers(Context &context);
+
   static bool generateLeftModifiers(Context &context,
                                     std::stringstream &buffer);
 
