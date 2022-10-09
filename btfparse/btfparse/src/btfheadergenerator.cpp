@@ -1014,10 +1014,11 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
         try_again = true;
       }
     }
+  } while (try_again);
 
-  } while (!try_again);
-
-  // Update the types that depend on the typedefs we patched
+  // Update the types that depend on the typedefs we patched. Since
+  // the typedef and the struct are now generated together, we can
+  // just change the typedef parents to point to the struct
   for (const auto &struct_id : context.top_level_type_list) {
     auto struct_dependency_list_it = context.type_tree.find(struct_id);
     if (struct_dependency_list_it == context.type_tree.end()) {
@@ -1030,12 +1031,16 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
       const auto &typedef_id = p.first;
       const auto &typedef_struct_id = p.second;
 
-      if (struct_dependency_list.count(typedef_id) == 0) {
+      if (struct_id == typedef_struct_id ||
+          struct_dependency_list.count(typedef_id) == 0) {
         continue;
       }
 
-      auto weak_reference = struct_dependency_list.at(typedef_id);
-      struct_dependency_list.insert({typedef_struct_id, weak_reference});
+      if (struct_dependency_list.count(typedef_struct_id) > 0) {
+        struct_dependency_list.erase(typedef_struct_id);
+      }
+
+      struct_dependency_list.insert({typedef_struct_id, false});
     }
   }
 
@@ -1072,7 +1077,7 @@ bool BTFHeaderGenerator::createTypeQueueHelper(Context &context,
     auto &link_list = link_list_it->second;
 
     for (const auto &p : link_list) {
-      const auto &linked_type = p.first;
+      auto linked_type = p.first;
       const auto &weak_reference = p.second;
 
       if (weak_reference) {
@@ -1099,10 +1104,11 @@ bool BTFHeaderGenerator::createTypeQueueHelper(Context &context,
           return false;
         }
 
-      } else {
-        if (!createTypeQueueHelper(context, linked_type)) {
-          return false;
-        }
+        linked_type = fwd_type_id;
+      }
+
+      if (!createTypeQueueHelper(context, linked_type)) {
+        return false;
       }
     }
   }
