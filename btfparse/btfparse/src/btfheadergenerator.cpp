@@ -10,6 +10,8 @@
 
 #include <algorithm>
 #include <optional>
+#include <streambuf>
+#include <unordered_set>
 #include <variant>
 
 #include <btfparse/ibtf.h>
@@ -34,6 +36,61 @@ template <typename Type> Type &getTypeAsMutable(BTFType &btf_type) {
   }
 
   return std::get<Type>(btf_type);
+}
+
+bool createInverseTypeTree(BTFHeaderGenerator::Context &context) {
+  context.inverse_type_tree = {};
+
+  for (const auto &p : context.type_tree) {
+    const auto &parent_id = p.first;
+    const auto &child_link_map = p.second;
+
+    for (const auto &c : child_link_map) {
+      const auto &child_id = c.first;
+
+      auto it = context.inverse_type_tree.find(child_id);
+      if (it == context.inverse_type_tree.end()) {
+        auto insert_status = context.inverse_type_tree.insert({child_id, {}});
+        it = insert_status.first;
+      }
+
+      auto &parent_links = it->second;
+      parent_links.insert(parent_id);
+    }
+  }
+
+  return true;
+}
+
+std::unordered_set<std::uint32_t>
+collectParentNodes(BTFHeaderGenerator::Context context, std::uint32_t start) {
+  std::unordered_set<std::uint32_t> next_queue{start};
+  std::unordered_set<std::uint32_t> visited;
+
+  while (!next_queue.empty()) {
+    auto queue = std::move(next_queue);
+    next_queue.clear();
+
+    for (const auto &id : queue) {
+      if (visited.count(id) > 0) {
+        continue;
+      }
+
+      visited.insert(id);
+
+      auto it = context.inverse_type_tree.find(id);
+      if (it == context.inverse_type_tree.end()) {
+        continue;
+      }
+
+      const auto &link_list = it->second;
+      for (const auto &link : link_list) {
+        next_queue.insert(link);
+      }
+    }
+  }
+
+  return visited;
 }
 
 } // namespace
@@ -975,12 +1032,17 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
       }
 
       auto &struct_dependency_list = struct_dependency_list_it->second;
+      if (struct_dependency_list.empty()) {
+        continue;
+      }
 
       auto opt_struct_name = getTypeName(context, struct_id);
       if (!opt_struct_name.has_value()) {
         // Since this is a top level type, this should not be possible
         return false;
       }
+
+      const auto &struct_name = opt_struct_name.value();
 
       for (const auto &p : struct_dependency_list) {
         auto &typedef_id = p.first;
@@ -1005,10 +1067,9 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
 
         typedef_dependency_list.erase(struct_id);
 
-        auto fwd_id =
-            getOrCreateFwdType(context, is_union, opt_struct_name.value());
-
+        auto fwd_id = getOrCreateFwdType(context, is_union, struct_name);
         typedef_dependency_list.insert({fwd_id, false});
+
         typedef_map.insert({typedef_id, struct_id});
 
         try_again = true;
@@ -1019,8 +1080,10 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
   // Update the types that depend on the typedefs we patched. Since
   // the typedef and the struct are now generated together, we can
   // just change the typedef parents to point to the struct
-  for (const auto &struct_id : context.top_level_type_list) {
-    auto struct_dependency_list_it = context.type_tree.find(struct_id);
+  createInverseTypeTree(context);
+
+  for (const auto &typedef_user : context.top_level_type_list) {
+    auto struct_dependency_list_it = context.type_tree.find(typedef_user);
     if (struct_dependency_list_it == context.type_tree.end()) {
       continue;
     }
@@ -1031,8 +1094,13 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
       const auto &typedef_id = p.first;
       const auto &typedef_struct_id = p.second;
 
-      if (struct_id == typedef_struct_id ||
+      if (typedef_user == typedef_struct_id ||
           struct_dependency_list.count(typedef_id) == 0) {
+        continue;
+      }
+
+      auto typedef_user_parents = collectParentNodes(context, typedef_user);
+      if (typedef_user_parents.count(typedef_struct_id) > 0) {
         continue;
       }
 
