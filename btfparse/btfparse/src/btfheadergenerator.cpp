@@ -1009,7 +1009,6 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
             getOrCreateFwdType(context, is_union, opt_struct_name.value());
 
         typedef_dependency_list.insert({fwd_id, false});
-
         typedef_map.insert({typedef_id, struct_id});
 
         try_again = true;
@@ -1096,13 +1095,14 @@ bool BTFHeaderGenerator::createTypeQueueHelper(Context &context,
         auto fwd_type_id =
             getOrCreateFwdType(context, is_union, opt_type_name.value());
 
-        context.type_queue.push_back(fwd_type_id);
+        if (!createTypeQueueHelper(context, fwd_type_id)) {
+          return false;
+        }
 
-        continue;
-      }
-
-      if (!createTypeQueueHelper(context, linked_type)) {
-        return false;
+      } else {
+        if (!createTypeQueueHelper(context, linked_type)) {
+          return false;
+        }
       }
     }
   }
