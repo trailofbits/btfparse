@@ -40,8 +40,12 @@ public:
     std::vector<std::uint32_t> type_queue;
 
     std::unordered_set<std::uint32_t> visited_type_list;
+
     std::unordered_map<std::uint32_t, std::unordered_map<std::uint32_t, bool>>
         type_tree;
+
+    std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>>
+        inverse_type_tree;
 
     std::vector<std::vector<std::uint32_t>> modifier_list_stack;
     std::vector<std::uint32_t> modifier_list;
