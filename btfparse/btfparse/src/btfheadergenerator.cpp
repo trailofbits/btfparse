@@ -63,7 +63,7 @@ bool createInverseTypeTree(BTFHeaderGenerator::Context &context) {
 }
 
 std::unordered_set<std::uint32_t>
-collectParentNodes(BTFHeaderGenerator::Context context, std::uint32_t start) {
+collectChildNodes(BTFHeaderGenerator::Context context, std::uint32_t start) {
   std::unordered_set<std::uint32_t> next_queue{start};
   std::unordered_set<std::uint32_t> visited;
 
@@ -78,14 +78,15 @@ collectParentNodes(BTFHeaderGenerator::Context context, std::uint32_t start) {
 
       visited.insert(id);
 
-      auto it = context.inverse_type_tree.find(id);
-      if (it == context.inverse_type_tree.end()) {
+      auto type_tree_it = context.type_tree.find(id);
+      if (type_tree_it == context.type_tree.end()) {
         continue;
       }
 
-      const auto &link_list = it->second;
-      for (const auto &link : link_list) {
-        next_queue.insert(link);
+      const auto &type_map = type_tree_it->second;
+      for (const auto &p : type_map) {
+        const auto &child_id = p.first;
+        next_queue.insert(child_id);
       }
     }
   }
@@ -1082,33 +1083,51 @@ bool BTFHeaderGenerator::adjustTypedefDependencyLoops(Context &context) {
   // just change the typedef parents to point to the struct
   createInverseTypeTree(context);
 
-  for (const auto &typedef_user : context.top_level_type_list) {
-    auto struct_dependency_list_it = context.type_tree.find(typedef_user);
-    if (struct_dependency_list_it == context.type_tree.end()) {
+  std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>>
+      child_node_list_map;
+
+  for (const auto &p : typedef_map) {
+    const auto &typedef_id = p.first;
+    const auto &typedef_struct_id = p.second;
+
+    auto inverse_type_tree_it = context.inverse_type_tree.find(typedef_id);
+    if (inverse_type_tree_it == context.inverse_type_tree.end()) {
       continue;
     }
 
-    auto &struct_dependency_list = struct_dependency_list_it->second;
+    const auto &typedef_user_list = inverse_type_tree_it->second;
 
-    for (const auto &p : typedef_map) {
-      const auto &typedef_id = p.first;
-      const auto &typedef_struct_id = p.second;
+    auto child_node_list_map_it = child_node_list_map.find(typedef_struct_id);
 
-      if (typedef_user == typedef_struct_id ||
-          struct_dependency_list.count(typedef_id) == 0) {
+    if (child_node_list_map_it == child_node_list_map.end()) {
+      auto struct_child_nodes = collectChildNodes(context, typedef_struct_id);
+
+      auto insert_status = child_node_list_map.insert(
+          {typedef_struct_id, std::move(struct_child_nodes)});
+
+      child_node_list_map_it = insert_status.first;
+    }
+
+    const auto &struct_child_nodes = child_node_list_map_it->second;
+
+    for (const auto &typedef_user : typedef_user_list) {
+      if (typedef_user == typedef_struct_id) {
         continue;
       }
 
-      auto typedef_user_parents = collectParentNodes(context, typedef_user);
-      if (typedef_user_parents.count(typedef_struct_id) > 0) {
+      if (struct_child_nodes.count(typedef_user) > 0) {
         continue;
       }
 
-      if (struct_dependency_list.count(typedef_struct_id) > 0) {
-        struct_dependency_list.erase(typedef_struct_id);
+      auto type_tree_it = context.type_tree.find(typedef_user);
+      if (type_tree_it == context.type_tree.end()) {
+        continue;
       }
 
-      struct_dependency_list.insert({typedef_struct_id, false});
+      auto &typedef_user_deps = type_tree_it->second;
+
+      typedef_user_deps.erase(typedef_struct_id);
+      typedef_user_deps.insert({typedef_struct_id, false});
     }
   }
 
