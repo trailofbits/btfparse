@@ -12,10 +12,10 @@
 #include <btfparse/result.h>
 
 #include <filesystem>
-#include <map>
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <unordered_map>
 #include <vector>
 
 namespace btfparse {
@@ -329,7 +329,7 @@ using BTFType =
                  FuncBTFType, FuncProtoBTFType, VarBTFType, DataSecBTFType,
                  FloatBTFType>;
 
-using BTFTypeMap = std::map<std::uint32_t, BTFType>;
+using BTFTypeMap = std::unordered_map<std::uint32_t, BTFType>;
 using PathList = std::vector<std::filesystem::path>;
 
 class IBTF {
